@@ -15,9 +15,14 @@ class WixAPIClient:
             "new_arrivals": f"{self.base_url}/_functions/getNewArrivals",
             "mens_products": f"{self.base_url}/_functions/getMensProducts", 
             "womens_products": f"{self.base_url}/_functions/getWomensProducts",
-            "order_status": f"{self.base_url}/_functions/getOrderStatus",
             "search_products": f"{self.base_url}/_functions/searchProducts",
-            "get_product": f"{self.base_url}/_functions/getProduct"
+            "get_product": f"{self.base_url}/_functions/getProduct",
+            # New order endpoints
+            "order_items": f"{self.base_url}/_functions/getOrderItems",
+            "order_item_status": f"{self.base_url}/_functions/getOrderItemStatus",
+            "order_summary": f"{self.base_url}/_functions/getOrderSummary",
+            "user_orders": f"{self.base_url}/_functions/getUserOrders",
+            "order_status": f"{self.base_url}/_functions/getOrderStatus"  # Legacy
         }
         
         print(f"🔗 WixAPIClient initialized with base URL: {self.base_url}")
@@ -51,6 +56,7 @@ class WixAPIClient:
         except Exception as e:
             print(f"❌ Error fetching new arrivals: {e}")
             return []
+
     async def get_mens_products(self, limit: int = 8) -> List[Dict[str, Any]]:
         """Fetch men's products from Wix"""
         try:
@@ -122,6 +128,7 @@ class WixAPIClient:
         except Exception as e:
             print(f"❌ Error searching products: {e}")
             return []
+
     async def get_product(self, product_id: str) -> Optional[Dict[str, Any]]:
         """Get single product by ID"""
         try:
@@ -146,11 +153,143 @@ class WixAPIClient:
         except Exception as e:
             print(f"❌ Error fetching product: {e}")
             return None
-    
-    async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
-        """Get order status by ID - Future feature"""
+
+    # ============== NEW ORDER STATUS METHODS ==============
+
+    async def get_order_items(self, order_id: str) -> Dict[str, Any]:
+        """Get all items in an order - Bot accessible"""
         try:
-            print(f"📋 Fetching order status: {order_id}")
+            print(f"📋 Fetching order items for order: {order_id}")
+            
+            headers = {
+                'User-Agent': 'ai-customer-service-bot/2.0',
+                'X-Bot-Request': 'true'
+            }
+            
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(
+                    self.endpoints["order_items"],
+                    params={"orderId": order_id},
+                    headers=headers
+                ) as response:
+                    
+                    if response.status == 200:
+                        data = await response.json()
+                        print(f"✅ Retrieved order items for order: {order_id}")
+                        return {
+                            "success": True,
+                            "orderId": data.get("orderId"),
+                            "items": data.get("items", []),
+                            "totalItems": data.get("totalItems", 0)
+                        }
+                    else:
+                        error_data = await response.json() if response.content_type == 'application/json' else {}
+                        print(f"❌ Order items API returned status {response.status}")
+                        return {
+                            "success": False,
+                            "error": error_data.get("error", "Failed to retrieve order items"),
+                            "code": error_data.get("code", "API_ERROR")
+                        }
+                        
+        except Exception as e:
+            print(f"❌ Error fetching order items: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "code": "NETWORK_ERROR"
+            }
+
+    async def get_order_item_status(self, order_id: str, catalog_item_id: str) -> Dict[str, Any]:
+        """Get specific order item status - Bot accessible"""
+        try:
+            print(f"📦 Fetching order item status for order: {order_id}, item: {catalog_item_id}")
+            
+            headers = {
+                'User-Agent': 'ai-customer-service-bot/2.0',
+                'X-Bot-Request': 'true'
+            }
+            
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(
+                    self.endpoints["order_item_status"],
+                    params={"orderId": order_id, "catalogItemId": catalog_item_id},
+                    headers=headers
+                ) as response:
+                    
+                    if response.status == 200:
+                        data = await response.json()
+                        print(f"✅ Retrieved order item status")
+                        return {
+                            "success": True,
+                            "orderId": data.get("orderId"),
+                            "item": data.get("item"),
+                            "shipmentStatus": data.get("shipmentStatus")
+                        }
+                    else:
+                        error_data = await response.json() if response.content_type == 'application/json' else {}
+                        print(f"❌ Order item status API returned status {response.status}")
+                        return {
+                            "success": False,
+                            "error": error_data.get("error", "Failed to retrieve order item status"),
+                            "code": error_data.get("code", "API_ERROR")
+                        }
+                        
+        except Exception as e:
+            print(f"❌ Error fetching order item status: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "code": "NETWORK_ERROR"
+            }
+
+    async def get_order_summary(self, order_id: str) -> Dict[str, Any]:
+        """Get order summary - Bot accessible with limited fields"""
+        try:
+            print(f"📊 Fetching order summary for order: {order_id}")
+            
+            headers = {
+                'User-Agent': 'ai-customer-service-bot/2.0',
+                'X-Bot-Request': 'true'
+            }
+            
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(
+                    self.endpoints["order_summary"],
+                    params={"orderId": order_id},
+                    headers=headers
+                ) as response:
+                    
+                    if response.status == 200:
+                        data = await response.json()
+                        print(f"✅ Retrieved order summary")
+                        return {
+                            "success": True,
+                            "order": data.get("order"),
+                            "itemCount": data.get("itemCount"),
+                            "orderId": data.get("orderId")
+                        }
+                    else:
+                        error_data = await response.json() if response.content_type == 'application/json' else {}
+                        print(f"❌ Order summary API returned status {response.status}")
+                        return {
+                            "success": False,
+                            "error": error_data.get("error", "Failed to retrieve order summary"),
+                            "code": error_data.get("code", "API_ERROR")
+                        }
+                        
+        except Exception as e:
+            print(f"❌ Error fetching order summary: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "code": "NETWORK_ERROR"
+            }
+
+    # Legacy method for backward compatibility
+    async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """Legacy order status method - For backward compatibility"""
+        try:
+            print(f"📋 Fetching legacy order status: {order_id}")
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -160,16 +299,18 @@ class WixAPIClient:
                     
                     if response.status == 200:
                         data = await response.json()
-                        order = data.get('order')
-                        if order:
-                            print(f"✅ Retrieved order status: {order.get('status', 'Unknown')}")
-                        return order
+                        if 'error' not in data:
+                            print(f"✅ Retrieved legacy order status")
+                            return data
+                        else:
+                            print(f"❌ Legacy order status error: {data['error']}")
+                            return None
                     else:
-                        print(f"❌ Order API returned status {response.status}")
+                        print(f"❌ Legacy order status API returned status {response.status}")
                         return None
                         
         except Exception as e:
-            print(f"❌ Error fetching order status: {e}")
+            print(f"❌ Error fetching legacy order status: {e}")
             return None
     
     async def test_connection(self) -> bool:
