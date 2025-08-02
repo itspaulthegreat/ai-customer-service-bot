@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Customer Service Bot Test</title>
+    <title>AI Customer Service Bot - New Arrivals</title>
     <style>
         * {
             margin: 0;
@@ -143,15 +143,16 @@
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+            justify-content: center;
         }
 
         .quick-action {
-            padding: 6px 12px;
+            padding: 8px 16px;
             background: white;
             border: 1px solid #e9ecef;
-            border-radius: 15px;
+            border-radius: 20px;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 13px;
             color: #6c757d;
             transition: all 0.2s;
         }
@@ -169,6 +170,7 @@
             color: #6c757d;
             font-style: italic;
             font-size: 12px;
+            margin-left: 20px;
         }
 
         .typing-dots {
@@ -210,8 +212,8 @@
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>🤖 AI Customer Service</h1>
-            <p>Ask me about products, orders, or anything else!</p>
+            <h1>🆕 New Arrivals Bot</h1>
+            <p>Discover our latest products and what's fresh in store!</p>
         </div>
         
         <div class="status-bar">
@@ -221,23 +223,22 @@
         <div class="chat-messages" id="chatMessages">
             <div class="message bot">
                 <div class="message-content">
-                    👋 Hello! I'm your AI customer service assistant. I can help you:
-                    
-• Find products in our store
-• Check product availability and prices
-• Get order status updates
-• Answer questions about our store
+                    👋 Hello! I'm your New Arrivals assistant. I can show you our latest products!
 
-How can I help you today?
+Try asking me:
+• "Show me new arrivals"
+• "What's new in the store?"
+• "Latest products"
+
+What would you like to see today?
                 </div>
             </div>
         </div>
 
         <div class="quick-actions">
-            <div class="quick-action" onclick="sendQuickMessage('Do you have any blue shirts?')">🔍 Search products</div>
-            <div class="quick-action" onclick="sendQuickMessage('Show me women\'s clothing')">👗 Women's items</div>
-            <div class="quick-action" onclick="sendQuickMessage('What men\'s products do you have?')">👔 Men's items</div>
-            <div class="quick-action" onclick="sendQuickMessage('What is the status of my order?')">📦 Order status</div>
+            <div class="quick-action" onclick="sendQuickMessage('Show me new arrivals')">🆕 New Arrivals</div>
+            <div class="quick-action" onclick="sendQuickMessage('What\'s new in the store?')">✨ What's New</div>
+            <div class="quick-action" onclick="sendQuickMessage('Latest products')">🔥 Latest Products</div>
         </div>
 
         <div class="typing-indicator" id="typingIndicator">
@@ -250,7 +251,7 @@ How can I help you today?
         </div>
 
         <div class="chat-input-container">
-            <input type="text" id="chatInput" class="chat-input" placeholder="Type your message here..." maxlength="500">
+            <input type="text" id="chatInput" class="chat-input" placeholder="Ask me about new arrivals..." maxlength="500">
             <button id="sendButton" class="send-button" onclick="sendMessage()">Send</button>
         </div>
     </div>
@@ -274,7 +275,7 @@ How can I help you today?
                     throw new Error('Bot not responding');
                 }
             } catch (error) {
-                document.getElementById('status').innerHTML = '🔴 Bot is offline - Check if your server is running on port 8000';
+                document.getElementById('status').innerHTML = '🔴 Bot is offline - Make sure to run: python main.py';
                 isConnected = false;
             }
         }
@@ -286,7 +287,7 @@ How can I help you today?
             
             if (!message) return;
             if (!isConnected) {
-                showError('Bot is not connected. Please check if your server is running.');
+                showError('Bot is not connected. Please make sure your server is running (python main.py).');
                 return;
             }
 
@@ -390,46 +391,6 @@ How can I help you today?
             // Check status every 30 seconds
             setInterval(checkStatus, 30000);
         });
-
-        // Test buttons for debugging
-        function testWixConnection() {
-            fetch(`${API_BASE}/test-wix`)
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Wix Test Result:', data);
-                    alert('Check console for Wix test results');
-                })
-                .catch(error => {
-                    console.error('Wix Test Error:', error);
-                    alert('Wix test failed - check console');
-                });
-        }
-
-        function testChatFunctionality() {
-            fetch(`${API_BASE}/test-chat`, { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Chat Test Results:', data);
-                    alert('Check console for chat test results');
-                })
-                .catch(error => {
-                    console.error('Chat Test Error:', error);
-                    alert('Chat test failed - check console');
-                });
-        }
-
-        // Add test buttons (for development)
-        if (window.location.hostname === 'localhost') {
-            setTimeout(() => {
-                const container = document.querySelector('.chat-input-container');
-                const testDiv = document.createElement('div');
-                testDiv.innerHTML = `
-                    <button onclick="testWixConnection()" style="margin: 5px; padding: 5px 10px; font-size: 12px;">Test Wix</button>
-                    <button onclick="testChatFunctionality()" style="margin: 5px; padding: 5px 10px; font-size: 12px;">Test Chat</button>
-                `;
-                container.parentNode.insertBefore(testDiv, container);
-            }, 1000);
-        }
     </script>
 </body>
 </html>
