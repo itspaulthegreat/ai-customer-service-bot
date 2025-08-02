@@ -5,7 +5,5 @@ langchain-core==0.2.38
 langchain-community==0.2.16
 requests==2.31.0
 pydantic==2.9.0
-pydantic-core==2.23.2
 python-multipart==0.0.6
 python-dotenv==1.0.0
-typing-extensions==4.8.0
