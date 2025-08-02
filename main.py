@@ -6,9 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 import uvicorn
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -16,11 +16,11 @@ load_dotenv()
 # Environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 WIX_BASE_URL = os.getenv("WIX_BASE_URL")
-PORT = int(os.getenv("PORT", 8000))  # For Render
+PORT = int(os.getenv("PORT", 8000))
 
-app = FastAPI(title="AI Customer Service Bot", version="1.0.0")
+app = FastAPI(title="AI Customer Service Bot", version="3.0.0")
 
-# CORS middleware - Allow all origins for now
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,7 +43,7 @@ try:
     llm = ChatGroq(
         model_name="llama-3.3-70b-versatile",
         temperature=0.1,
-        max_tokens=1000,
+        max_tokens=1200,
         groq_api_key=GROQ_API_KEY
     )
     print("✅ Groq LLM initialized successfully")
@@ -51,11 +51,29 @@ except Exception as e:
     print(f"❌ Error initializing Groq: {e}")
     raise
 
-# Simplified Wix API client - New Arrivals Only
-class WixAPIClient:
+# Try to import the new Pure AI system
+try:
+    from src.api.wix_client import WixAPIClient
+    from src.bot.pure_ai_agent import PureAIAgent
+    
+    # Initialize Wix client
+    wix_client = WixAPIClient(WIX_BASE_URL)
+    
+    # Initialize the Pure AI agent (no pattern matching!)
+    agent = PureAIAgent(GROQ_API_KEY, wix_client)
+    print("✅ Pure AI agent system initialized successfully - NO REGEX!")
+    use_ai_system = True
+    
+except Exception as e:
+    print(f"⚠️  Error loading Pure AI system: {e}")
+    print("📦 Falling back to legacy system...")
+    use_ai_system = False
+
+# Legacy Wix API client for fallback
+class LegacyWixAPIClient:
     def __init__(self, base_url: str):
         self.base_url = base_url if base_url else "https://your-wix-site.com"
-        print(f"🔗 Wix Base URL: {self.base_url}")
+        print(f"🔗 Legacy Wix Base URL: {self.base_url}")
     
     def test_connection(self) -> bool:
         """Test if Wix API is reachable"""
@@ -89,154 +107,220 @@ class WixAPIClient:
             print(f"❌ Error fetching new arrivals: {e}")
             return []
 
-# Initialize Wix client
-wix_client = WixAPIClient(WIX_BASE_URL)
+# Initialize legacy client as fallback
+if not use_ai_system:
+    legacy_wix_client = LegacyWixAPIClient(WIX_BASE_URL)
 
-# New arrivals tool
-@tool
-def get_new_arrivals_tool(query: str = "") -> str:
-    """Get the latest new arrivals from the store. Use this when customers ask about new arrivals, latest products, or what's new."""
-    try:
-        print(f"🛍️ Tool called: get_new_arrivals_tool")
-        products = wix_client.get_new_arrivals(15)
-        
-        if not products:
-            return "I'm sorry, I couldn't retrieve the new arrivals right now. Please try again later or check our website directly."
-        
-        result = "🆕 **Here are our latest new arrivals:**\n\n"
-        
-        for i, product in enumerate(products[:8], 1):  # Show top 8 products
-            result += f"{i}. **{product.get('name', 'Product')}**\n"
-            
-            # Price information
-            if product.get('formattedDiscountedPrice') and product.get('formattedDiscountedPrice') != product.get('formattedPrice'):
-                result += f"   💰 **{product['formattedDiscountedPrice']}** ~~{product.get('formattedPrice', 'N/A')}~~\n"
-            else:
-                result += f"   💰 {product.get('formattedPrice', 'Price not available')}\n"
-            
-            # Stock status
-            result += f"   📦 {'✅ In Stock' if product.get('inStock', False) else '❌ Out of Stock'}\n"
-            
-            # Link to product
-            if product.get('slug'):
-                result += f"   🔗 [View Product]({wix_client.base_url}/product/{product['slug']})\n\n"
-            else:
-                result += "\n"
-        
-        result += f"\n💡 *Showing {len(products[:8])} of {len(products)} new arrivals. Visit our website to see more!*"
-        
-        return result
-        
-    except Exception as e:
-        print(f"❌ Error in get_new_arrivals_tool: {e}")
-        return "I encountered an error while fetching new arrivals. Please try again or contact support."
-
-# Create the customer service agent
-def create_customer_service_agent():
-    """Create a customer service agent focused on new arrivals"""
-    
-    system_prompt = """You are a helpful customer service assistant for an online clothing store.
-
-Your main function is to show customers our latest new arrivals when they ask.
-
-You have access to this tool:
-- get_new_arrivals_tool: Get the latest new arrivals from the store
-
-Guidelines:
-- Be friendly, helpful, and professional
-- Use get_new_arrivals_tool when customers ask about "new arrivals", "latest products", "what's new", or similar
-- For general greetings, be welcoming and mention you can show them new arrivals
-- If customers ask about other things you can't help with, politely let them know your specialty is showing new arrivals
-- Keep responses concise but informative
-
-Common phrases that should trigger new arrivals:
-- "new arrivals"
-- "what's new"
-- "latest products" 
-- "show me new items"
-- "recent additions"
-- "newest items"
-
-When customers greet you, welcome them and offer to show new arrivals."""
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", "{input}")
-    ])
-    
-    return prompt | llm
-
-# Create the agent
-try:
-    agent_chain = create_customer_service_agent()
-    print("✅ Customer service agent created successfully")
-except Exception as e:
-    print(f"❌ Error creating agent: {e}")
-    raise
-
-def process_message(message: str) -> str:
-    """Process message and decide whether to show new arrivals or use general AI"""
+# Legacy fallback function (only used if AI system fails to load)
+def legacy_process_message(message: str) -> str:
+    """Legacy message processing with basic pattern matching"""
     message_lower = message.lower()
-    print(f"🤔 Processing message: '{message}'")
+    print(f"🤔 Legacy processing message: '{message}'")
     
-    # Check for new arrivals requests
+    # Very basic new arrivals detection
     if any(phrase in message_lower for phrase in [
         "new arrivals", "new arrival", "what's new", "whats new", 
         "latest", "recent", "newest", "show me new", "new items",
         "new products", "fresh", "just added", "arrivals"
     ]):
         print("🆕 Detected new arrivals request")
-        return get_new_arrivals_tool.invoke({"query": message})
-    
-    # For all other messages, use the AI agent
-    else:
         try:
-            print("🤖 Using AI agent for general response")
-            response = agent_chain.invoke({"input": message})
-            return response.content if hasattr(response, 'content') else str(response)
+            products = legacy_wix_client.get_new_arrivals(8)
+            if not products:
+                return "I'm sorry, I couldn't retrieve the new arrivals right now. Please try again later or check our website directly."
+            
+            result = "🆕 **Here are our latest new arrivals:**\n\n"
+            
+            for i, product in enumerate(products[:6], 1):  # Show top 6 products
+                result += f"{i}. **{product.get('name', 'Product')}**\n"
+                
+                # Price information
+                if product.get('formattedDiscountedPrice') and product.get('formattedDiscountedPrice') != product.get('formattedPrice'):
+                    result += f"   💰 **{product['formattedDiscountedPrice']}** ~~{product.get('formattedPrice', 'N/A')}~~\n"
+                else:
+                    result += f"   💰 {product.get('formattedPrice', 'Price not available')}\n"
+                
+                # Stock status
+                result += f"   📦 {'✅ In Stock' if product.get('inStock', False) else '❌ Out of Stock'}\n"
+                
+                # Link to product
+                if product.get('slug'):
+                    result += f"   🔗 [View Product]({legacy_wix_client.base_url}/product/{product['slug']})\n\n"
+                else:
+                    result += "\n"
+            
+            result += f"\n💡 *Showing {len(products[:6])} of {len(products)} new arrivals. Visit our website to see more!*"
+            return result
+            
         except Exception as e:
-            print(f"❌ Error with agent: {e}")
-            return "Hello! I'm here to help you discover our latest new arrivals. Just ask me 'show me new arrivals' to see what's fresh in our store!"
+            print(f"❌ Error in legacy new arrivals: {e}")
+            return "I encountered an error while fetching new arrivals. Please try again or contact support."
+    
+    # For all other messages, provide general help
+    else:
+        return "👋 Hello! I'm here to help you discover our latest new arrivals. Just ask me 'show me new arrivals' to see what's fresh in our store! I can also help with general store questions."
 
-# API Endpoints
+# ============================================================================
+# API ENDPOINTS - SIMPLIFIED FOR PURE AI
+# ============================================================================
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(message: ChatMessage):
-    """Main chat endpoint"""
+    """Pure AI chat endpoint - no pattern matching!"""
     try:
         print(f"\n💬 Received message: {message.message}")
         
-        # Process the message
-        response_text = process_message(message.message)
-        
-        print(f"🤖 Bot response: {response_text[:100]}...")
-        
-        return ChatResponse(
-            response=response_text,
-            confidence=0.9
-        )
+        if use_ai_system:
+            # Use Pure AI system - LLM handles everything!
+            print("🤖 Using Pure AI Agent (no regex/patterns)")
+            result = await agent.process_message(message.message, message.user_id)
+            
+            response_text = result.get("response", "I'm sorry, I couldn't process your request.")
+            confidence = result.get("confidence", 0.8)
+            
+            print(f"🤖 AI Agent response: {response_text[:100]}...")
+            
+            return ChatResponse(
+                response=response_text,
+                confidence=confidence
+            )
+        else:
+            # Legacy fallback system
+            print("📦 Using legacy fallback system")
+            response_text = legacy_process_message(message.message)
+            
+            print(f"🤖 Legacy response: {response_text[:100]}...")
+            
+            return ChatResponse(
+                response=response_text,
+                confidence=0.7
+            )
     
     except Exception as e:
-        print(f"❌ Error in chat: {e}")
+        print(f"❌ Error in chat endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         return ChatResponse(
-            response="I'm sorry, I encountered an error. Please try again or contact support.",
+            response="I apologize for the technical difficulty. Please try again in a moment or contact our customer service team.",
             confidence=0.1
         )
 
 @app.get("/")
 async def root():
-    return {"message": "AI Customer Service Bot is running! Ask me about new arrivals!", "status": "healthy"}
+    system_status = "pure_ai" if use_ai_system else "legacy_fallback"
+    return {
+        "message": "AI Customer Service Bot is running! Ask me about new arrivals, order status, or anything else!", 
+        "status": "healthy",
+        "system": system_status,
+        "version": "3.0.0",
+        "features": ["Pure AI Intent Recognition", "Natural Language Processing", "No Pattern Matching"] if use_ai_system else ["Basic Pattern Matching", "Legacy Fallback"]
+    }
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    wix_connected = wix_client.test_connection()
-    return {
-        "status": "healthy", 
-        "model": "llama-3.3-70b-versatile",
-        "wix_api": "connected" if wix_connected else "disconnected",
-        "wix_url": wix_client.base_url,
-        "groq_api": "connected" if GROQ_API_KEY else "missing"
-    }
+    if use_ai_system:
+        try:
+            wix_connected = await wix_client.test_connection()
+            agent_healthy = agent.is_healthy()
+            
+            return {
+                "status": "healthy", 
+                "system": "pure_ai",
+                "model": "llama-3.3-70b-versatile",
+                "wix_api": "connected" if wix_connected else "disconnected",
+                "wix_url": wix_client.base_url,
+                "groq_api": "connected" if GROQ_API_KEY else "missing",
+                "agent_healthy": agent_healthy,
+                "ai_features": ["Intent Analysis", "Parameter Extraction", "Response Generation"],
+                "no_regex": True,
+                "no_patterns": True
+            }
+        except Exception as e:
+            return {
+                "status": "degraded",
+                "system": "pure_ai",
+                "error": str(e),
+                "fallback_available": True
+            }
+    else:
+        try:
+            wix_connected = legacy_wix_client.test_connection()
+            
+            return {
+                "status": "healthy", 
+                "system": "legacy_fallback",
+                "model": "llama-3.3-70b-versatile",
+                "wix_api": "connected" if wix_connected else "disconnected",
+                "wix_url": legacy_wix_client.base_url,
+                "groq_api": "connected" if GROQ_API_KEY else "missing",
+                "note": "Using basic pattern matching as fallback"
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "system": "legacy_fallback", 
+                "error": str(e)
+            }
+
+@app.get("/test-ai")
+async def test_ai():
+    """Test the AI agent capabilities"""
+    if not use_ai_system:
+        return {
+            "error": "AI system not available",
+            "system": "legacy_fallback",
+            "message": "Pure AI agent failed to load"
+        }
+    
+    try:
+        print("🧪 Testing AI agent capabilities...")
+        
+        # Test with different types of messages
+        test_messages = [
+            "Show me new arrivals",
+            "Check my order ABC123", 
+            "What's new in men's clothing?",
+            "I need help with returns"
+        ]
+        
+        test_results = []
+        for msg in test_messages:
+            try:
+                result = await agent.process_message(msg, "test_user")
+                test_results.append({
+                    "message": msg,
+                    "action": result.get("action", "unknown"),
+                    "confidence": result.get("confidence", 0),
+                    "success": result.get("success", False)
+                })
+            except Exception as e:
+                test_results.append({
+                    "message": msg,
+                    "error": str(e),
+                    "success": False
+                })
+        
+        return {
+            "system": "pure_ai",
+            "agent_healthy": agent.is_healthy(),
+            "test_results": test_results,
+            "ai_features": {
+                "intent_analysis": True,
+                "parameter_extraction": True,
+                "natural_language": True,
+                "no_regex": True,
+                "no_patterns": True
+            },
+            "test_status": "completed"
+        }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "system": "pure_ai",
+            "test_status": "failed"
+        }
 
 @app.get("/test-wix")
 async def test_wix():
@@ -244,29 +328,91 @@ async def test_wix():
     try:
         print("🧪 Testing Wix integration...")
         
-        # Test connection
-        connection_ok = wix_client.test_connection()
-        
-        # Test new arrivals
-        new_arrivals = wix_client.get_new_arrivals(5)
-        
-        return {
-            "wix_connection": connection_ok,
-            "wix_url": wix_client.base_url,
-            "new_arrivals_count": len(new_arrivals),
-            "sample_product": new_arrivals[0] if new_arrivals else "No products found",
-            "test_status": "success" if connection_ok and new_arrivals else "failed"
-        }
+        if use_ai_system:
+            # Test AI system with Wix
+            connection_ok = await wix_client.test_connection()
+            new_arrivals = await wix_client.get_new_arrivals(3)
+            
+            return {
+                "system": "pure_ai",
+                "wix_connection": connection_ok,
+                "wix_url": wix_client.base_url,
+                "new_arrivals_count": len(new_arrivals),
+                "sample_product": new_arrivals[0] if new_arrivals else "No products found",
+                "test_status": "success" if connection_ok and new_arrivals else "failed",
+                "available_endpoints": list(wix_client.endpoints.keys())
+            }
+        else:
+            # Test legacy system
+            connection_ok = legacy_wix_client.test_connection()
+            new_arrivals = legacy_wix_client.get_new_arrivals(3)
+            
+            return {
+                "system": "legacy_fallback",
+                "wix_connection": connection_ok,
+                "wix_url": legacy_wix_client.base_url,
+                "new_arrivals_count": len(new_arrivals),
+                "sample_product": new_arrivals[0] if new_arrivals else "No products found",
+                "test_status": "success" if connection_ok and new_arrivals else "failed"
+            }
     except Exception as e:
         return {
             "error": str(e), 
-            "wix_url": wix_client.base_url,
+            "system": "pure_ai" if use_ai_system else "legacy_fallback",
             "test_status": "failed"
         }
 
+@app.get("/agent-info")
+async def agent_info():
+    """Get information about the current agent system"""
+    if use_ai_system:
+        return {
+            "system": "pure_ai",
+            "version": "3.0.0",
+            "description": "Pure AI-driven customer service agent",
+            "features": {
+                "intent_recognition": "LLM-based natural language understanding",
+                "parameter_extraction": "AI extracts order IDs, search terms, etc.",
+                "response_generation": "Contextual AI-generated responses",
+                "no_regex": "Zero regular expressions or pattern matching",
+                "no_hardcoded_rules": "Fully adaptive AI decision making"
+            },
+            "capabilities": [
+                "New arrivals display",
+                "Product search",
+                "Order status checking", 
+                "General customer support",
+                "Natural conversation"
+            ],
+            "ai_model": "llama-3.3-70b-versatile",
+            "agent_healthy": agent.is_healthy() if 'agent' in globals() else False
+        }
+    else:
+        return {
+            "system": "legacy_fallback",
+            "version": "2.0.0",
+            "description": "Basic pattern matching fallback system",
+            "features": {
+                "pattern_matching": "Basic regex-based intent detection",
+                "limited_responses": "Template-based responses",
+                "fallback_only": "Used when AI system fails to load"
+            },
+            "capabilities": [
+                "Basic new arrivals display",
+                "Simple greetings"
+            ],
+            "note": "This is a fallback system. The Pure AI system is preferred."
+        }
+
 if __name__ == "__main__":
-    print(f"\n🚀 Starting AI Customer Service Bot...")
+    print(f"\n🚀 Starting AI Customer Service Bot v3.0...")
     print(f"📡 Wix URL: {WIX_BASE_URL}")
     print(f"🔑 Groq API Key: {'✅ Set' if GROQ_API_KEY else '❌ Missing'}")
+    print(f"🤖 System: {'Pure AI (No Regex!)' if use_ai_system else 'Legacy Fallback'}")
+    
+    if use_ai_system:
+        print("✨ Features: Natural Language Understanding, AI Intent Recognition, Zero Pattern Matching")
+    else:
+        print("⚠️  Running in fallback mode with basic pattern matching")
     
     uvicorn.run(app, host="0.0.0.0", port=PORT)
