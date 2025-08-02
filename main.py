@@ -16,10 +16,11 @@ load_dotenv()
 # Environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 WIX_BASE_URL = os.getenv("WIX_BASE_URL")
+PORT = int(os.getenv("PORT", 8000))  # For Render
 
 app = FastAPI(title="AI Customer Service Bot", version="1.0.0")
 
-# CORS middleware
+# CORS middleware - Allow all origins for now
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -264,11 +265,8 @@ async def test_wix():
         }
 
 if __name__ == "__main__":
-    print(f"\n🚀 Starting AI Customer Service Bot (New Arrivals Only)...")
+    print(f"\n🚀 Starting AI Customer Service Bot...")
     print(f"📡 Wix URL: {WIX_BASE_URL}")
     print(f"🔑 Groq API Key: {'✅ Set' if GROQ_API_KEY else '❌ Missing'}")
-    print(f"🌐 Chat interface: Open chat.html in your browser")
-    print(f"🔧 Health check: http://localhost:8000/health")
-    print(f"🧪 Test Wix: http://localhost:8000/test-wix")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
