@@ -457,7 +457,13 @@
     <div class="error-toast" id="errorToast"></div>
 
     <script>
-        const API_BASE = 'http://localhost:8000';
+        // Dynamically set API base URL
+        const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? 'http://localhost:8000' 
+            : 'https://ai-customer-service-bot.onrender.com';
+        
+        console.log('API Base URL:', API_BASE);
+        
         let isConnected = false;
         let messageCount = 0;
 
@@ -485,7 +491,7 @@
                 document.getElementById('statusDot').style.background = '#ef4444';
                 document.getElementById('statusText').textContent = 'Offline';
                 isConnected = false;
-                showError('Bot is offline. Make sure to run: python main.py');
+                showError('Bot is offline. Please check connection.');
             }
         }
 
@@ -496,7 +502,7 @@
             
             if (!message) return;
             if (!isConnected) {
-                showError('Bot is not connected. Please make sure your server is running.');
+                showError('Bot is not connected. Please check connection.');
                 return;
             }
 
