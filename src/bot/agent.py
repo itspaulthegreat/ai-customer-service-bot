@@ -5,6 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from src.tools.base_tool import BaseTool
 from src.tools.new_arrivals import NewArrivalsTool
 from src.tools.general_support import GeneralSupportTool
+from src.tools.order_status import OrderStatusTool
 from src.config.settings import Settings
 
 class CustomerServiceAgent:
@@ -30,6 +31,7 @@ class CustomerServiceAgent:
         # Initialize tools
         self.tools = {
             "new_arrivals": NewArrivalsTool(wix_client),
+            "order_status": OrderStatusTool(wix_client),
             "general_support": GeneralSupportTool(wix_client)
         }
         
@@ -43,6 +45,7 @@ class CustomerServiceAgent:
 
 Your primary capabilities:
 - Show customers new arrivals and latest products
+- Check order status and shipment tracking
 - Provide general customer support
 - Guide customers to appropriate resources
 
@@ -50,11 +53,23 @@ Guidelines:
 - Be friendly, professional, and concise
 - Use emojis appropriately to make responses engaging
 - When customers ask about new arrivals, latest products, or what's new, use your new arrivals tool
+- When customers ask about order status, tracking, or shipments, use your order status tool
 - For other inquiries, provide helpful general support
 - If you can't help with something specific, politely explain your limitations and suggest alternatives
-- Always prioritize customer satisfaction and strive to provide the best possible assistance."""
-        # Note: The chain creation is incomplete in your code; we'll leave it as is for now
-        return None  # Placeholder, as the original code doesn't implement the chain
+- Always prioritize customer satisfaction and strive to provide the best possible assistance
+
+For order status queries:
+- Ask for the order ID if not provided
+- Explain shipment status clearly
+- Provide helpful next steps
+- Direct customers to contact support for complex issues"""
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{input}")
+        ])
+        
+        return prompt | self.llm
 
     def is_healthy(self) -> bool:
         """Check if the agent and its components are healthy"""
@@ -75,25 +90,53 @@ Guidelines:
     async def process_message(self, message: str, user_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Process incoming user message and route to appropriate tool"""
         try:
-            # Check which tool matches the intent
-            for tool_name, tool in self.tools.items():
+            # Check which tool matches the intent - order matters for priority
+            tool_priority = ["order_status", "new_arrivals", "general_support"]
+            
+            for tool_name in tool_priority:
+                tool = self.tools[tool_name]
                 if tool.matches_intent(message):
                     result = await tool.execute(message)
+                    
+                    # Handle different result formats
+                    if isinstance(result, dict) and "data" in result:
+                        response_text = result["data"]
+                        if isinstance(response_text, dict):
+                            response_text = response_text.get("response", str(response_text))
+                    else:
+                        response_text = str(result)
+                    
                     return {
-                        "response": result["data"] if isinstance(result["data"], str) else result["data"].get("response", tool.get_fallback_response()),
-                        "confidence": result["confidence"],
+                        "response": response_text,
+                        "confidence": result.get("confidence", 0.8) if isinstance(result, dict) else 0.8,
                         "intent": tool_name,
                         "tools_used": [tool_name]
                     }
             
-            # Default to general support tool if no specific intent matches
-            result = await self.tools["general_support"].execute(message)
-            return {
-                "response": result["data"],
-                "confidence": result["confidence"],
-                "intent": "general_support",
-                "tools_used": ["general_support"]
-            }
+            # If no specific tool matches, use LLM to generate a response
+            try:
+                llm_response = self.agent_chain.invoke({"input": message})
+                response_text = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
+                
+                return {
+                    "response": response_text,
+                    "confidence": 0.7,
+                    "intent": "llm_general",
+                    "tools_used": ["llm"]
+                }
+            except Exception as llm_error:
+                print(f"❌ LLM error: {llm_error}")
+                # Fallback to general support tool
+                result = await self.tools["general_support"].execute(message)
+                response_text = result["data"] if isinstance(result, dict) and "data" in result else str(result)
+                
+                return {
+                    "response": response_text,
+                    "confidence": 0.6,
+                    "intent": "general_support_fallback",
+                    "tools_used": ["general_support"]
+                }
+            
         except Exception as e:
             print(f"❌ Error processing message: {e}")
             return {

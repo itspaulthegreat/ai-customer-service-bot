@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 import uvicorn
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -18,7 +19,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 WIX_BASE_URL = os.getenv("WIX_BASE_URL")
 PORT = int(os.getenv("PORT", 8000))  # For Render
 
-app = FastAPI(title="AI Customer Service Bot", version="1.0.0")
+app = FastAPI(title="AI Customer Service Bot", version="2.0.0")
 
 # CORS middleware - Allow all origins for now
 app.add_middleware(
@@ -51,11 +52,29 @@ except Exception as e:
     print(f"❌ Error initializing Groq: {e}")
     raise
 
-# Simplified Wix API client - New Arrivals Only
-class WixAPIClient:
+# Import the modular components
+try:
+    from src.api.wix_client import WixAPIClient
+    from src.bot.agent import CustomerServiceAgent
+    
+    # Initialize Wix client
+    wix_client = WixAPIClient(WIX_BASE_URL)
+    
+    # Initialize the main agent
+    agent = CustomerServiceAgent(GROQ_API_KEY, wix_client)
+    print("✅ Modular agent system initialized successfully")
+    use_modular_system = True
+    
+except Exception as e:
+    print(f"⚠️  Error loading modular system: {e}")
+    print("📦 Falling back to legacy system...")
+    use_modular_system = False
+
+# Legacy Wix API client for fallback
+class LegacyWixAPIClient:
     def __init__(self, base_url: str):
         self.base_url = base_url if base_url else "https://your-wix-site.com"
-        print(f"🔗 Wix Base URL: {self.base_url}")
+        print(f"🔗 Legacy Wix Base URL: {self.base_url}")
     
     def test_connection(self) -> bool:
         """Test if Wix API is reachable"""
@@ -89,16 +108,16 @@ class WixAPIClient:
             print(f"❌ Error fetching new arrivals: {e}")
             return []
 
-# Initialize Wix client
-wix_client = WixAPIClient(WIX_BASE_URL)
+# Initialize legacy client as fallback
+legacy_wix_client = LegacyWixAPIClient(WIX_BASE_URL)
 
-# New arrivals tool
+# Legacy new arrivals tool
 @tool
 def get_new_arrivals_tool(query: str = "") -> str:
     """Get the latest new arrivals from the store. Use this when customers ask about new arrivals, latest products, or what's new."""
     try:
-        print(f"🛍️ Tool called: get_new_arrivals_tool")
-        products = wix_client.get_new_arrivals(15)
+        print(f"🛍️ Legacy tool called: get_new_arrivals_tool")
+        products = legacy_wix_client.get_new_arrivals(15)
         
         if not products:
             return "I'm sorry, I couldn't retrieve the new arrivals right now. Please try again later or check our website directly."
@@ -119,7 +138,7 @@ def get_new_arrivals_tool(query: str = "") -> str:
             
             # Link to product
             if product.get('slug'):
-                result += f"   🔗 [View Product]({wix_client.base_url}/product/{product['slug']})\n\n"
+                result += f"   🔗 [View Product]({legacy_wix_client.base_url}/product/{product['slug']})\n\n"
             else:
                 result += "\n"
         
@@ -131,9 +150,9 @@ def get_new_arrivals_tool(query: str = "") -> str:
         print(f"❌ Error in get_new_arrivals_tool: {e}")
         return "I encountered an error while fetching new arrivals. Please try again or contact support."
 
-# Create the customer service agent
-def create_customer_service_agent():
-    """Create a customer service agent focused on new arrivals"""
+# Legacy agent for fallback
+def create_legacy_agent():
+    """Create a legacy customer service agent"""
     
     system_prompt = """You are a helpful customer service assistant for an online clothing store.
 
@@ -147,17 +166,7 @@ Guidelines:
 - Use get_new_arrivals_tool when customers ask about "new arrivals", "latest products", "what's new", or similar
 - For general greetings, be welcoming and mention you can show them new arrivals
 - If customers ask about other things you can't help with, politely let them know your specialty is showing new arrivals
-- Keep responses concise but informative
-
-Common phrases that should trigger new arrivals:
-- "new arrivals"
-- "what's new"
-- "latest products" 
-- "show me new items"
-- "recent additions"
-- "newest items"
-
-When customers greet you, welcome them and offer to show new arrivals."""
+- Keep responses concise but informative"""
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
@@ -166,18 +175,18 @@ When customers greet you, welcome them and offer to show new arrivals."""
     
     return prompt | llm
 
-# Create the agent
+# Create the legacy agent
 try:
-    agent_chain = create_customer_service_agent()
-    print("✅ Customer service agent created successfully")
+    legacy_agent_chain = create_legacy_agent()
+    print("✅ Legacy customer service agent created successfully")
 except Exception as e:
-    print(f"❌ Error creating agent: {e}")
+    print(f"❌ Error creating legacy agent: {e}")
     raise
 
-def process_message(message: str) -> str:
-    """Process message and decide whether to show new arrivals or use general AI"""
+def legacy_process_message(message: str) -> str:
+    """Legacy message processing"""
     message_lower = message.lower()
-    print(f"🤔 Processing message: '{message}'")
+    print(f"🤔 Legacy processing message: '{message}'")
     
     # Check for new arrivals requests
     if any(phrase in message_lower for phrase in [
@@ -191,11 +200,11 @@ def process_message(message: str) -> str:
     # For all other messages, use the AI agent
     else:
         try:
-            print("🤖 Using AI agent for general response")
-            response = agent_chain.invoke({"input": message})
+            print("🤖 Using legacy AI agent for general response")
+            response = legacy_agent_chain.invoke({"input": message})
             return response.content if hasattr(response, 'content') else str(response)
         except Exception as e:
-            print(f"❌ Error with agent: {e}")
+            print(f"❌ Error with legacy agent: {e}")
             return "Hello! I'm here to help you discover our latest new arrivals. Just ask me 'show me new arrivals' to see what's fresh in our store!"
 
 # API Endpoints
@@ -205,15 +214,31 @@ async def chat(message: ChatMessage):
     try:
         print(f"\n💬 Received message: {message.message}")
         
-        # Process the message
-        response_text = process_message(message.message)
-        
-        print(f"🤖 Bot response: {response_text[:100]}...")
-        
-        return ChatResponse(
-            response=response_text,
-            confidence=0.9
-        )
+        if use_modular_system:
+            # Use the new modular agent system
+            print("🚀 Using modular agent system")
+            result = await agent.process_message(message.message, message.user_id)
+            
+            response_text = result.get("response", "I'm sorry, I couldn't process your request.")
+            confidence = result.get("confidence", 0.8)
+            
+            print(f"🤖 Modular bot response: {response_text[:100]}...")
+            
+            return ChatResponse(
+                response=response_text,
+                confidence=confidence
+            )
+        else:
+            # Use legacy system
+            print("📦 Using legacy system")
+            response_text = legacy_process_message(message.message)
+            
+            print(f"🤖 Legacy bot response: {response_text[:100]}...")
+            
+            return ChatResponse(
+                response=response_text,
+                confidence=0.9
+            )
     
     except Exception as e:
         print(f"❌ Error in chat: {e}")
@@ -224,19 +249,42 @@ async def chat(message: ChatMessage):
 
 @app.get("/")
 async def root():
-    return {"message": "AI Customer Service Bot is running! Ask me about new arrivals!", "status": "healthy"}
+    system_status = "modular" if use_modular_system else "legacy"
+    return {
+        "message": "AI Customer Service Bot is running! Ask me about new arrivals and order status!", 
+        "status": "healthy",
+        "system": system_status,
+        "version": "2.0.0"
+    }
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    wix_connected = wix_client.test_connection()
-    return {
-        "status": "healthy", 
-        "model": "llama-3.3-70b-versatile",
-        "wix_api": "connected" if wix_connected else "disconnected",
-        "wix_url": wix_client.base_url,
-        "groq_api": "connected" if GROQ_API_KEY else "missing"
-    }
+    if use_modular_system:
+        wix_connected = await wix_client.test_connection()
+        agent_healthy = agent.is_healthy()
+        
+        return {
+            "status": "healthy", 
+            "system": "modular",
+            "model": "llama-3.3-70b-versatile",
+            "wix_api": "connected" if wix_connected else "disconnected",
+            "wix_url": wix_client.base_url,
+            "groq_api": "connected" if GROQ_API_KEY else "missing",
+            "agent_healthy": agent_healthy,
+            "tools": list(agent.tools.keys()) if agent_healthy else []
+        }
+    else:
+        wix_connected = legacy_wix_client.test_connection()
+        
+        return {
+            "status": "healthy", 
+            "system": "legacy",
+            "model": "llama-3.3-70b-versatile",
+            "wix_api": "connected" if wix_connected else "disconnected",
+            "wix_url": legacy_wix_client.base_url,
+            "groq_api": "connected" if GROQ_API_KEY else "missing"
+        }
 
 @app.get("/test-wix")
 async def test_wix():
@@ -244,29 +292,82 @@ async def test_wix():
     try:
         print("🧪 Testing Wix integration...")
         
-        # Test connection
-        connection_ok = wix_client.test_connection()
-        
-        # Test new arrivals
-        new_arrivals = wix_client.get_new_arrivals(5)
-        
-        return {
-            "wix_connection": connection_ok,
-            "wix_url": wix_client.base_url,
-            "new_arrivals_count": len(new_arrivals),
-            "sample_product": new_arrivals[0] if new_arrivals else "No products found",
-            "test_status": "success" if connection_ok and new_arrivals else "failed"
-        }
+        if use_modular_system:
+            # Test modular system
+            connection_ok = await wix_client.test_connection()
+            new_arrivals = await wix_client.get_new_arrivals(5)
+            
+            return {
+                "system": "modular",
+                "wix_connection": connection_ok,
+                "wix_url": wix_client.base_url,
+                "new_arrivals_count": len(new_arrivals),
+                "sample_product": new_arrivals[0] if new_arrivals else "No products found",
+                "test_status": "success" if connection_ok and new_arrivals else "failed",
+                "endpoints": list(wix_client.endpoints.keys())
+            }
+        else:
+            # Test legacy system
+            connection_ok = legacy_wix_client.test_connection()
+            new_arrivals = legacy_wix_client.get_new_arrivals(5)
+            
+            return {
+                "system": "legacy",
+                "wix_connection": connection_ok,
+                "wix_url": legacy_wix_client.base_url,
+                "new_arrivals_count": len(new_arrivals),
+                "sample_product": new_arrivals[0] if new_arrivals else "No products found",
+                "test_status": "success" if connection_ok and new_arrivals else "failed"
+            }
     except Exception as e:
         return {
             "error": str(e), 
-            "wix_url": wix_client.base_url,
+            "system": "modular" if use_modular_system else "legacy",
+            "test_status": "failed"
+        }
+
+@app.get("/test-order-status")
+async def test_order_status():
+    """Test order status functionality (modular system only)"""
+    if not use_modular_system:
+        return {
+            "error": "Order status testing only available in modular system",
+            "system": "legacy"
+        }
+    
+    try:
+        print("🧪 Testing order status functionality...")
+        
+        # Test order status tool
+        order_tool = agent.tools.get("order_status")
+        if not order_tool:
+            return {
+                "error": "Order status tool not found",
+                "available_tools": list(agent.tools.keys())
+            }
+        
+        # Test with a sample order ID
+        test_result = await order_tool.execute("Check order status for order TEST123")
+        
+        return {
+            "system": "modular",
+            "order_tool_available": True,
+            "test_query": "Check order status for order TEST123",
+            "test_result": test_result,
+            "test_status": "success" if test_result.get("success", False) else "expected_failure"
+        }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "system": "modular",
             "test_status": "failed"
         }
 
 if __name__ == "__main__":
-    print(f"\n🚀 Starting AI Customer Service Bot...")
+    print(f"\n🚀 Starting AI Customer Service Bot v2.0...")
     print(f"📡 Wix URL: {WIX_BASE_URL}")
     print(f"🔑 Groq API Key: {'✅ Set' if GROQ_API_KEY else '❌ Missing'}")
+    print(f"🤖 System: {'Modular' if use_modular_system else 'Legacy'}")
     
     uvicorn.run(app, host="0.0.0.0", port=PORT)
