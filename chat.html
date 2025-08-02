@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Customer Service Bot Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .status-bar {
+            background: #f8f9fa;
+            padding: 10px 20px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            line-height: 1.4;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.bot .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e9ecef;
+            white-space: pre-wrap;
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            outline: none;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .send-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .quick-actions {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .quick-action {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #6c757d;
+            transition: all 0.2s;
+        }
+
+        .quick-action:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            color: #6c757d;
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 2px;
+        }
+
+        .typing-dots span {
+            width: 4px;
+            height: 4px;
+            background: #6c757d;
+            border-radius: 50%;
+            animation: typing 1.5s infinite;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; }
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 AI Customer Service</h1>
+            <p>Ask me about products, orders, or anything else!</p>
+        </div>
+        
+        <div class="status-bar">
+            <span id="status">🔴 Connecting to bot...</span>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <div class="message-content">
+                    👋 Hello! I'm your AI customer service assistant. I can help you:
+                    
+• Find products in our store
+• Check product availability and prices
+• Get order status updates
+• Answer questions about our store
+
+How can I help you today?
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-actions">
+            <div class="quick-action" onclick="sendQuickMessage('Do you have any blue shirts?')">🔍 Search products</div>
+            <div class="quick-action" onclick="sendQuickMessage('Show me women\'s clothing')">👗 Women's items</div>
+            <div class="quick-action" onclick="sendQuickMessage('What men\'s products do you have?')">👔 Men's items</div>
+            <div class="quick-action" onclick="sendQuickMessage('What is the status of my order?')">📦 Order status</div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            Bot is typing
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <input type="text" id="chatInput" class="chat-input" placeholder="Type your message here..." maxlength="500">
+            <button id="sendButton" class="send-button" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let isConnected = false;
+
+        // Check bot status on load
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    isConnected = true;
+                    document.getElementById('status').innerHTML = '🟢 Bot is online | ' + 
+                        `Wix: ${data.wix_api === 'connected' ? '✅' : '❌'} | ` +
+                        `Model: ${data.model}`;
+                } else {
+                    throw new Error('Bot not responding');
+                }
+            } catch (error) {
+                document.getElementById('status').innerHTML = '🔴 Bot is offline - Check if your server is running on port 8000';
+                isConnected = false;
+            }
+        }
+
+        // Send message function
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            if (!isConnected) {
+                showError('Bot is not connected. Please check if your server is running.');
+                return;
+            }
+
+            // Clear input and disable button
+            input.value = '';
+            const sendButton = document.getElementById('sendButton');
+            sendButton.disabled = true;
+
+            // Add user message to chat
+            addMessage(message, 'user');
+
+            // Show typing indicator
+            showTyping(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: 'test-user'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addMessage(data.response, 'bot');
+                } else {
+                    throw new Error(data.detail || 'Unknown error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Sorry, I encountered an error. Please try again.', 'bot');
+                showError(`Error: ${error.message}`);
+            } finally {
+                showTyping(false);
+                sendButton.disabled = false;
+                input.focus();
+            }
+        }
+
+        // Quick message function
+        function sendQuickMessage(message) {
+            document.getElementById('chatInput').value = message;
+            sendMessage();
+        }
+
+        // Add message to chat
+        function addMessage(content, sender) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(contentDiv);
+            messagesContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Show/hide typing indicator
+        function showTyping(show) {
+            const indicator = document.getElementById('typingIndicator');
+            indicator.style.display = show ? 'flex' : 'none';
+            
+            if (show) {
+                const messagesContainer = document.getElementById('chatMessages');
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            messagesContainer.appendChild(errorDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Enter key support
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Initialize on page load
+        window.addEventListener('load', function() {
+            checkStatus();
+            document.getElementById('chatInput').focus();
+            
+            // Check status every 30 seconds
+            setInterval(checkStatus, 30000);
+        });
+
+        // Test buttons for debugging
+        function testWixConnection() {
+            fetch(`${API_BASE}/test-wix`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Wix Test Result:', data);
+                    alert('Check console for Wix test results');
+                })
+                .catch(error => {
+                    console.error('Wix Test Error:', error);
+                    alert('Wix test failed - check console');
+                });
+        }
+
+        function testChatFunctionality() {
+            fetch(`${API_BASE}/test-chat`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Chat Test Results:', data);
+                    alert('Check console for chat test results');
+                })
+                .catch(error => {
+                    console.error('Chat Test Error:', error);
+                    alert('Chat test failed - check console');
+                });
+        }
+
+        // Add test buttons (for development)
+        if (window.location.hostname === 'localhost') {
+            setTimeout(() => {
+                const container = document.querySelector('.chat-input-container');
+                const testDiv = document.createElement('div');
+                testDiv.innerHTML = `
+                    <button onclick="testWixConnection()" style="margin: 5px; padding: 5px 10px; font-size: 12px;">Test Wix</button>
+                    <button onclick="testChatFunctionality()" style="margin: 5px; padding: 5px 10px; font-size: 12px;">Test Chat</button>
+                `;
+                container.parentNode.insertBefore(testDiv, container);
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
