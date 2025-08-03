@@ -166,12 +166,14 @@ def legacy_process_message(message: str) -> str:
 
 # Update your chat endpoint in main.py
 
+# Fix your chat endpoint in main.py - remove the userEmail reference
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(message: ChatMessage):
     try:
         print(f"\n💬 Received message: {message.message}")
         print(f"👤 User ID: {message.user_id}")
-        print(f"📧 User Email: {message.userEmail}")
+        # ❌ REMOVED: print(f"📧 User Email: {message.userEmail}")  # This attribute doesn't exist
         
         if use_ai_system:
             # 🆕 CRITICAL: Pass user_id to the agent for order-related queries
@@ -199,16 +201,6 @@ async def chat(message: ChatMessage):
             response="I apologize for the technical difficulty. Please try again or contact our customer service team.",
             confidence=0.1
         )
-    
-    except Exception as e:
-        print(f"❌ Error in chat endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatResponse(
-            response="I apologize for the technical difficulty. Please try again in a moment or contact our customer service team.",
-            confidence=0.1
-        )
-
 @app.get("/")
 async def root():
     system_status = "pure_ai" if use_ai_system else "legacy_fallback"
