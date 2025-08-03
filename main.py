@@ -21,6 +21,133 @@ from src.tools.general_tools import GeneralTools
 from src.api.wix_client import WixAPIClient
 from src.utils.response_formatter import ResponseFormatter
 from src.utils.logger import Logger
+import sys
+import traceback
+print("🚀 DEBUG: Starting main.py initialization...")
+print(f"🐍 Python version: {sys.version}")
+
+# Test each import individually
+try:
+    print("📦 Testing imports...")
+    
+    print("  - Testing dotenv...")
+    from dotenv import load_dotenv
+    print("  ✅ dotenv imported")
+    
+    print("  - Testing FastAPI...")
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel
+    print("  ✅ FastAPI imported")
+    
+    print("  - Testing core imports...")
+    from src.core.memory_manager import ConversationMemoryManager
+    print("  ✅ ConversationMemoryManager imported")
+    
+    from src.core.ai_coordinator import AICoordinator
+    print("  ✅ AICoordinator imported")
+    
+    print("  - Testing tool imports...")
+    from src.tools.product_tools import ProductTools
+    print("  ✅ ProductTools imported")
+    
+    from src.tools.order_tools import OrderTools
+    print("  ✅ OrderTools imported")
+    
+    from src.tools.general_tools import GeneralTools
+    print("  ✅ GeneralTools imported")
+    
+    print("  - Testing API imports...")
+    from src.api.wix_client import WixAPIClient
+    print("  ✅ WixAPIClient imported")
+    
+    print("  - Testing utils imports...")
+    from src.utils.response_formatter import ResponseFormatter
+    print("  ✅ ResponseFormatter imported")
+    
+    from src.utils.logger import Logger
+    print("  ✅ Logger imported")
+    
+    print("✅ All imports successful!")
+    
+except Exception as e:
+    print(f"❌ IMPORT ERROR: {e}")
+    print("Full traceback:")
+    traceback.print_exc()
+    print("Exiting due to import failure...")
+    sys.exit(1)
+
+# Test environment variables
+try:
+    print("🔧 Testing environment variables...")
+    load_dotenv()
+    
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    WIX_BASE_URL = os.getenv("WIX_BASE_URL")
+    PORT = int(os.getenv("PORT", 8000))
+    
+    print(f"  - GROQ_API_KEY: {'✅ Found' if GROQ_API_KEY else '❌ Missing'}")
+    print(f"  - WIX_BASE_URL: {WIX_BASE_URL or '❌ Missing'}")
+    print(f"  - PORT: {PORT}")
+    
+    if not GROQ_API_KEY:
+        print("❌ GROQ_API_KEY is required!")
+        print("Make sure your .env file contains: GROQ_API_KEY=your_key_here")
+        
+except Exception as e:
+    print(f"❌ Environment variable error: {e}")
+    traceback.print_exc()
+
+# Test component initialization
+try:
+    print("🔧 Testing component initialization...")
+    
+    print("  - Initializing Wix client...")
+    wix_client = WixAPIClient(WIX_BASE_URL)
+    print("  ✅ Wix client created")
+    
+    print("  - Initializing tools...")
+    product_tools = ProductTools(wix_client)
+    print("    ✅ ProductTools created")
+    
+    order_tools = OrderTools(wix_client) 
+    print("    ✅ OrderTools created")
+    
+    general_tools = GeneralTools()
+    print("    ✅ GeneralTools created")
+    
+    print("  - Initializing memory manager...")
+    memory_manager = ConversationMemoryManager()
+    print("  ✅ ConversationMemoryManager created")
+    
+    print("  - Initializing response formatter...")
+    response_formatter = ResponseFormatter()
+    print("  ✅ ResponseFormatter created")
+    
+    print("  - Initializing AI coordinator...")
+    ai_coordinator = AICoordinator(
+        groq_api_key=GROQ_API_KEY,
+        tools={
+            'product': product_tools,
+            'order': order_tools,
+            'general': general_tools
+        },
+        memory_manager=memory_manager,
+        response_formatter=response_formatter
+    )
+    print("  ✅ AICoordinator created")
+    
+    print("✅ All components initialized successfully!")
+    system_healthy = True
+    
+except Exception as e:
+    print(f"❌ COMPONENT INITIALIZATION ERROR: {e}")
+    print("Full traceback:")
+    traceback.print_exc()
+    system_healthy = False
+    print("⚠️ System marked as unhealthy, but continuing...")
+
+print(f"🏥 System Health Status: {'✅ Healthy' if system_healthy else '❌ Unhealthy'}")
 
 # Initialize logging
 logger = Logger(__name__)
@@ -91,19 +218,28 @@ except Exception as e:
     logger.error(f"❌ Failed to initialize AI system: {e}")
     system_healthy = False
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(message: ChatMessage):
-    """Enhanced chat endpoint with memory and specialized tools"""
+@app.post("/chat")
+async def chat_debug(message: ChatMessage):
+    """Debug version of chat endpoint"""
+    print(f"\n🔄 === NEW CHAT REQUEST ===")
+    print(f"📝 Message: {message.message}")
+    print(f"👤 User ID: {message.user_id}")
+    print(f"🆔 Session ID: {message.session_id}")
+    print(f"📋 Context: {message.context}")
+    print(f"🏥 System Healthy: {system_healthy}")
+    
     if not system_healthy:
+        print("❌ System unhealthy - returning error")
         raise HTTPException(status_code=503, detail="AI system unavailable")
     
     try:
-        logger.info(f"💬 Processing message: {message.message[:100]}...")
+        print("🤖 Starting AI processing...")
         
         # Generate session ID if not provided
         session_id = message.session_id or f"sess_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        print(f"🆔 Using session ID: {session_id}")
         
-        # Process message through AI coordinator
+        print("🧠 Calling ai_coordinator.process_conversation...")
         result = await ai_coordinator.process_conversation(
             message=message.message,
             user_id=message.user_id,
@@ -111,7 +247,12 @@ async def chat(message: ChatMessage):
             context=message.context or {}
         )
         
-        return ChatResponse(
+        print(f"✅ AI processing completed successfully!")
+        print(f"📊 Result keys: {list(result.keys())}")
+        print(f"🔧 Tools used: {result.get('tools_used', [])}")
+        print(f"📈 Confidence: {result.get('confidence', 0)}")
+        
+        response = ChatResponse(
             response=result["response"],
             session_id=session_id,
             confidence=result["confidence"],
@@ -120,23 +261,21 @@ async def chat(message: ChatMessage):
             suggested_actions=result.get("suggested_actions", [])
         )
         
+        print(f"✅ Response created successfully")
+        return response
+        
     except Exception as e:
-        logger.error(f"❌ Error in chat endpoint: {e}")
+        print(f"❌ CHAT ERROR: {e}")
+        print("Full error traceback:")
+        traceback.print_exc()
         
-        # Graceful error handling with memory
-        fallback_response = await ai_coordinator.handle_error_gracefully(
-            error=str(e),
-            user_message=message.message,
-            session_id=message.session_id or "error_session"
-        )
-        
-        return ChatResponse(
-            response=fallback_response["response"],
-            session_id=message.session_id or "error_session",
-            confidence=0.2,
-            tools_used=["error_handler"],
-            conversation_context={}
-        )
+        # Return the actual error instead of graceful handling
+        error_detail = f"Debug Error: {str(e)}"
+        print(f"🚨 Raising HTTPException with: {error_detail}")
+        raise HTTPException(status_code=500, detail=error_detail)
+
+print("🚀 Debug setup complete! Starting FastAPI server...")
+
 
 @app.get("/conversation/{session_id}")
 async def get_conversation_history(session_id: str):
