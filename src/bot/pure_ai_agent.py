@@ -502,17 +502,12 @@ Analyze this customer message considering the conversation context above.""")
             error = function_result.get("error", "")
             memory_content = function_result.get("memory_content", "")
             
-            # Format items list for orders
+            # Format items list for response
             formatted_items = []
-            if result_type == "order_status":
-                for item in items_list:
-                    options = item.get("options", {})
-                    size = options.get("Size", "N/A")
-                    formatted_items.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
-            elif result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
-                # Format products for new arrivals and other product types
-                products = function_result.get("products", [])
-                formatted_items = [f"{p.get('name', 'Unknown')} - ${p.get('price', 'N/A')}" for p in products]
+            for item in items_list:
+                options = item.get("options", {})
+                size = options.get("Size", "N/A")
+                formatted_items.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
             
             response = await asyncio.to_thread(
                 self.response_generator.invoke,
@@ -538,7 +533,8 @@ Analyze this customer message considering the conversation context above.""")
                 action=action_taken,
                 result=function_result,
                 original_message=original_message
-            )  
+            )
+    
     async def _create_fallback_response(self, action: str, result: Dict[str, Any], original_message: str) -> str:
         """Create a fallback response when AI generation fails"""
         result_type = result.get("type", "general")
