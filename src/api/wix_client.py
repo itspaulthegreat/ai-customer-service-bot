@@ -1,4 +1,3 @@
-# src/api/wix_client.py
 import aiohttp
 import asyncio
 from typing import Dict, List, Any, Optional
@@ -36,7 +35,7 @@ class WixAPIClient:
             'Content-Type': 'application/json'
         }
         
-        # Include user ID in headers if provided
+        # CRITICAL: Always include user ID in headers when available
         if user_id:
             headers['X-User-Id'] = user_id
             print(f"🔑 Added user ID to headers: {user_id}")
@@ -168,18 +167,17 @@ class WixAPIClient:
 
     # ============== ORDER STATUS METHODS ==============
 
-    async def get_order_items(self, order_id: str, user_id: str) -> Dict[str, Any]:
-        """Get all items in an order"""
-        if not user_id:
-            print(f"❌ Missing user_id for order items request: order_id={order_id}")
-            return {
-                "success": False,
-                "error": "User authentication required to check order status",
-                "code": "MISSING_USER_ID"
-            }
-        
+    async def get_order_items(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
+        """Get all items in an order - SIMPLIFIED to use frontend user ID"""
         try:
             print(f"📋 Fetching order items for order: {order_id}, user: {user_id}")
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "User ID is required for order access",
+                    "code": "MISSING_USER_ID"
+                }
             
             headers = self._get_bot_headers(user_id)
             
@@ -220,18 +218,17 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
-    async def get_order_item_status(self, order_id: str, catalog_item_id: str, user_id: str) -> Dict[str, Any]:
+    async def get_order_item_status(self, order_id: str, catalog_item_id: str, user_id: str = None) -> Dict[str, Any]:
         """Get specific order item status"""
-        if not user_id:
-            print(f"❌ Missing user_id for order item status request: order_id={order_id}, catalog_item_id={catalog_item_id}")
-            return {
-                "success": False,
-                "error": "User authentication required to check order item status",
-                "code": "MISSING_USER_ID"
-            }
-        
         try:
             print(f"📦 Fetching order item status for order: {order_id}, item: {catalog_item_id}, user: {user_id}")
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "User ID is required for order access",
+                    "code": "MISSING_USER_ID"
+                }
             
             headers = self._get_bot_headers(user_id)
             
@@ -269,18 +266,17 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
-    async def get_order_summary(self, order_id: str, user_id: str) -> Dict[str, Any]:
+    async def get_order_summary(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
         """Get order summary"""
-        if not user_id:
-            print(f"❌ Missing user_id for order summary request: order_id={order_id}")
-            return {
-                "success": False,
-                "error": "User authentication required to check order summary",
-                "code": "MISSING_USER_ID"
-            }
-        
         try:
             print(f"📊 Fetching order summary for order: {order_id}, user: {user_id}")
+            
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "User ID is required for order access",
+                    "code": "MISSING_USER_ID"
+                }
             
             headers = self._get_bot_headers(user_id)
             
@@ -317,6 +313,7 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
+    # Legacy method for backward compatibility
     async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
         """Legacy order status method - For backward compatibility"""
         try:
