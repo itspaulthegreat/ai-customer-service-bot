@@ -1,4 +1,4 @@
-# src/bot/pure_ai_agent.py - Updated to pass user_id correctly
+# src/bot/pure_ai_agent.py - Updated with session memory
 
 import asyncio
 import json
@@ -6,12 +6,14 @@ from typing import Dict, Any, Optional
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from .session_memory import session_memory
 
 class PureAIAgent:
-    """Pure AI-driven customer service agent with zero pattern matching"""
+    """Pure AI-driven customer service agent with session memory"""
     
     def __init__(self, groq_api_key: str, wix_client):
         self.wix_client = wix_client
+        self.memory = session_memory
         
         # Initialize LLM
         try:
@@ -30,12 +32,14 @@ class PureAIAgent:
         self.intent_analyzer = self._create_intent_analyzer()
         self.response_generator = self._create_response_generator()
         
-        print("✅ Pure AI Agent initialized - NO REGEX, NO PATTERNS!")
+        print("✅ Pure AI Agent initialized with SESSION MEMORY!")
     
     def _create_intent_analyzer(self):
         """AI that understands customer intent and extracts parameters"""
         
         system_prompt = """You are an AI assistant that analyzes customer messages for an online clothing store.
+
+You have access to the conversation history to understand context and references to previous messages.
 
 Your job is to understand what the customer wants and extract relevant information intelligently.
 
@@ -46,6 +50,7 @@ Available actions you can recommend:
 4. "search_products" - Customer is looking for specific items with search terms
 5. "check_order" - Customer wants order status/tracking information
 6. "general_help" - General questions, greetings, store policies, support
+7. "remember_context" - Customer is asking about previous messages or conversation context
 
 For each message, respond with JSON only using this format:
 {{
@@ -56,6 +61,11 @@ For each message, respond with JSON only using this format:
     "confidence": 0.95,
     "reasoning": "Brief explanation"
 }}
+
+Context awareness examples:
+- "What was my previous message?" → action: "remember_context", parameters: {{"type": "previous_user_message"}}
+- "What did you just tell me?" → action: "remember_context", parameters: {{"type": "previous_bot_message"}}
+- "What were we talking about?" → action: "remember_context", parameters: {{"type": "conversation_summary"}}
 
 Parameter extraction examples:
 - Order queries: Extract order IDs naturally
@@ -73,11 +83,17 @@ Parameter extraction examples:
   * "First 5 products" → limit: 5
   * Default to 8 if not specified
 
-Be intelligent about understanding context and variations in language."""
+Be intelligent about understanding context and variations in language. Use conversation history to understand references."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", "Analyze this customer message: {message}")
+            ("human", """
+Conversation History:
+{conversation_context}
+
+Current Message: {message}
+
+Analyze this customer message considering the conversation context above.""")
         ])
         
         return prompt | self.llm | JsonOutputParser()
@@ -87,15 +103,23 @@ Be intelligent about understanding context and variations in language."""
         
         system_prompt = """You are a friendly, professional customer service representative for an online clothing store.
 
-Create natural, engaging responses based on the function results provided.
+You have access to conversation history and should use it to provide contextual, personalized responses.
+
+Create natural, engaging responses based on the function results provided and conversation context.
 
 Guidelines:
 - Be warm, conversational, and helpful
+- Reference previous conversation naturally when relevant
 - Use appropriate emojis to make responses engaging (but don't overdo it)
 - Format product information attractively with prices and availability
 - Explain order status clearly with next steps for customers
 - For errors, be apologetic and suggest helpful alternatives
 - Always end with an offer to help further
+
+For memory/context questions:
+- Answer directly about what was said before
+- Be specific and helpful when referencing previous messages
+- Show that you remember and understand the conversation flow
 
 For product listings:
 - Use clean formatting with bullet points or numbers
@@ -119,25 +143,38 @@ Response should be natural conversation, not JSON or structured data."""
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
+Conversation History:
+{conversation_context}
+
 Customer originally asked: {original_message}
 Action taken: {action_taken}
 Function result: {function_result}
 Success: {was_successful}
 
-Generate a natural, helpful customer service response.""")
+Generate a natural, helpful customer service response that considers the conversation history.""")
         ])
         
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using pure AI intelligence"""
+        """Process customer message using pure AI intelligence with memory"""
         try:
             print(f"🤖 Pure AI processing: {message} (user_id: {user_id})")
             
-            # Step 1: AI analyzes intent and extracts parameters (no regex!)
+            # Add user message to memory
+            if user_id:
+                self.memory.add_message(user_id, message, 'user')
+            
+            # Get conversation context
+            conversation_context = self.memory.get_conversation_context(user_id) if user_id else "This is the start of the conversation."
+            
+            # Step 1: AI analyzes intent and extracts parameters with context
             intent_result = await asyncio.to_thread(
                 self.intent_analyzer.invoke,
-                {"message": message}
+                {
+                    "message": message,
+                    "conversation_context": conversation_context
+                }
             )
             
             print(f"🧠 AI Intent Analysis: {intent_result}")
@@ -156,13 +193,18 @@ Generate a natural, helpful customer service response.""")
             
             print(f"🔧 Action '{action}' executed: {action_result.get('success', False)}")
             
-            # Step 3: AI generates natural customer response
+            # Step 3: AI generates natural customer response with context
             response_text = await self._generate_natural_response(
                 original_message=message,
                 action_taken=action,
                 function_result=action_result,
-                was_successful=action_result.get("success", True)
+                was_successful=action_result.get("success", True),
+                conversation_context=conversation_context
             )
+            
+            # Add bot response to memory
+            if user_id:
+                self.memory.add_message(user_id, response_text, 'bot')
             
             return {
                 "response": response_text,
@@ -185,7 +227,11 @@ Generate a natural, helpful customer service response.""")
         try:
             user_id = params.get("user_id")  # Extract user_id from params
             
-            if action == "show_new_arrivals":
+            # NEW: Handle memory/context actions
+            if action == "remember_context":
+                return await self._handle_memory_request(params, user_id)
+            
+            elif action == "show_new_arrivals":
                 limit = params.get("limit", 8)
                 products = await self.wix_client.get_new_arrivals(limit)
                 return {
@@ -258,7 +304,6 @@ Generate a natural, helpful customer service response.""")
                     }
                 
                 print(f"🔍 Checking order status for: {order_id} (user: {user_id})")
-                # CRITICAL: Pass user_id to the order API
                 order_info = await self.wix_client.get_order_items(order_id, user_id)
                 
                 return {
@@ -287,8 +332,58 @@ Generate a natural, helpful customer service response.""")
                 "type": "execution_error"
             }
     
-    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict, was_successful: bool) -> str:
-        """Use AI to generate natural customer service response"""
+    # NEW: Handle memory/context requests
+    async def _handle_memory_request(self, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+        """Handle requests about conversation history"""
+        if not user_id:
+            return {
+                "success": False,
+                "error": "Cannot access conversation history without user context",
+                "type": "memory_error"
+            }
+        
+        request_type = params.get("type", "conversation_summary")
+        
+        if request_type == "previous_user_message":
+            last_message = self.memory.get_last_user_message(user_id)
+            return {
+                "success": True,
+                "type": "memory_response",
+                "request_type": "previous_user_message",
+                "content": last_message or "I don't see any previous messages from you in this conversation.",
+                "found": last_message is not None
+            }
+        
+        elif request_type == "previous_bot_message":
+            last_bot_message = self.memory.get_last_bot_message(user_id)
+            return {
+                "success": True,
+                "type": "memory_response",
+                "request_type": "previous_bot_message",
+                "content": last_bot_message or "I haven't responded to anything yet in this conversation.",
+                "found": last_bot_message is not None
+            }
+        
+        elif request_type == "conversation_summary":
+            history = self.memory.get_conversation_history(user_id, 10)
+            return {
+                "success": True,
+                "type": "memory_response",
+                "request_type": "conversation_summary",
+                "history": history,
+                "message_count": len(history)
+            }
+        
+        else:
+            return {
+                "success": True,
+                "type": "memory_response",
+                "request_type": "general",
+                "content": "I remember our conversation and I'm here to help! What would you like to know?"
+            }
+    
+    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict, was_successful: bool, conversation_context: str = "") -> str:
+        """Use AI to generate natural customer service response with conversation context"""
         try:
             response = await asyncio.to_thread(
                 self.response_generator.invoke,
@@ -296,7 +391,8 @@ Generate a natural, helpful customer service response.""")
                     "original_message": original_message,
                     "action_taken": action_taken,
                     "function_result": json.dumps(function_result, indent=2),
-                    "was_successful": was_successful
+                    "was_successful": was_successful,
+                    "conversation_context": conversation_context
                 }
             )
             
@@ -353,6 +449,31 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
     
     async def _create_fallback_response(self, result: Dict, success: bool) -> str:
         """Create fallback response when AI generation fails"""
+        # Handle memory responses specifically
+        if result.get("type") == "memory_response":
+            request_type = result.get("request_type")
+            content = result.get("content")
+            
+            if request_type == "previous_user_message":
+                if result.get("found"):
+                    return f"💭 Your previous message was: \"{content}\""
+                else:
+                    return "🤔 I don't see any previous messages from you in our current conversation."
+            
+            elif request_type == "previous_bot_message":
+                if result.get("found"):
+                    return f"💬 I just told you: \"{content}\""
+                else:
+                    return "🤔 I haven't responded to anything yet in this conversation."
+            
+            elif request_type == "conversation_summary":
+                message_count = result.get("message_count", 0)
+                return f"💭 We've exchanged {message_count} messages so far in this conversation. I remember everything we've discussed!"
+            
+            else:
+                return "💭 I remember our conversation and I'm here to help! What would you like to know?"
+        
+        # Handle other response types
         if success:
             result_type = result.get("type", "unknown")
             
@@ -422,7 +543,8 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
                 hasattr(self, 'llm') and self.llm is not None and
                 hasattr(self, 'wix_client') and self.wix_client is not None and
                 hasattr(self, 'intent_analyzer') and self.intent_analyzer is not None and
-                hasattr(self, 'response_generator') and self.response_generator is not None
+                hasattr(self, 'response_generator') and self.response_generator is not None and
+                hasattr(self, 'memory') and self.memory is not None
             )
         except Exception as e:
             print(f"❌ Health check failed: {e}")
