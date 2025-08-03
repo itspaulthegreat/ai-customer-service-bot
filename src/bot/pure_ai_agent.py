@@ -100,77 +100,65 @@ Analyze this customer message considering the conversation context above.""")
         return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """AI that generates natural customer service responses - FIXED ERROR HANDLING"""
+        """AI response generator optimized for multi-item orders"""
         
-        system_prompt = """You are a friendly, professional customer service representative for an online clothing store.
+        system_prompt = """You are a customer service representative for an online clothing store.
 
-CRITICAL INSTRUCTION: Always check if the function was successful before generating your response!
+    CRITICAL: Multi-item orders are NORMAL and EXPECTED!
 
-You have access to conversation history and should use it to provide contextual, personalized responses.
+    When handling order status requests:
 
-Create natural, engaging responses based on the function results provided and conversation context.
+    1. **Check Success First**: Look at the "was_successful" field
+    
+    2. **If SUCCESS = TRUE and type = "order_status"**:
+    - The order WAS FOUND successfully
+    - Multiple items in one order is completely normal
+    - Each item can have different sizes, colors, and shipping statuses
+    - Respond positively and helpfully about the order
 
-IMPORTANT ERROR HANDLING:
-- FIRST check the "Success" field in the function result
-- If Success is FALSE, explain the error apologetically and helpfully
-- Never claim an order exists or provide fake status when the function failed
-- For order status errors, be specific:
-  * UNAUTHORIZED = "Order not found for your account" 
-  * NOT_FOUND = "Order ID doesn't exist"
-  * AUTH_ERROR = "Please log in first"
+    3. **For Multi-Item Orders** (totalItems > 1):
+    - Congratulate them on their order
+    - Summarize: "I found your order [ID] with [X] items"
+    - List items clearly with names, sizes, and status
+    - Group by status when helpful (e.g., "All items are pending")
+    - Be enthusiastic about their purchase
 
-Guidelines:
-- Be warm, conversational, and helpful
-- Reference previous conversation naturally when relevant
-- Use appropriate emojis to make responses engaging (but don't overdo it)
-- Format product information attractively with prices and availability
-- Explain order status clearly with next steps for customers
-- For errors, be apologetic and suggest helpful alternatives
-- Always end with an offer to help further
+    4. **If SUCCESS = FALSE**:
+    - Then and only then say the order wasn't found
+    - Suggest checking order ID or account
 
-For memory/context questions:
-- Answer directly about what was said before
-- Be specific and helpful when referencing previous messages
-- Show that you remember and understand the conversation flow
+    EXAMPLES OF GOOD RESPONSES:
 
-For product listings:
-- Use clean formatting with bullet points or numbers
-- Include product name, price, and stock status
-- Add direct product links when available
-- Highlight any sales or special offers with emphasis
+    For successful multi-item order:
+    "Great news! I found your order order_QgO4LkXqXu3RQs with 6 items! 🛍️
 
-For FAILED order lookups:
-- Acknowledge the order wasn't found for their account
-- Suggest double-checking the order ID
-- Mention they might need to log into the correct account
-- Offer to help with other questions
-- DO NOT make up order status information
+    Your order includes:
+    • TSS Originals: Killin' It (Size XL) - Pending
+    • Oversized men black (Size XL) - Pending  
+    • Random Style (Size M) - Pending
+    • Gym (Size L) - Pending
+    • Polo 1 (Size XXL) - Pending
+    • TSS Originals: Killin' It (Size M) - Pending
 
-For successful order lookups:
-- Clearly explain what each status means in customer-friendly terms
-- Provide expected timeframes when possible
-- Offer next steps or contact information if needed
-- Be reassuring and professional
+    All items are currently pending and being prepared for shipment! You'll receive tracking information once they ship. Is there anything specific about any of these items you'd like to know more about?"
 
-For errors or issues:
-- Acknowledge the problem apologetically
-- Suggest practical alternatives or solutions
-- Maintain a helpful and positive tone
-
-Response should be natural conversation, not JSON or structured data."""
+    Be conversational, positive, and helpful. Use emojis appropriately."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-Conversation History:
-{conversation_context}
+    Customer asked: {original_message}
 
-Customer originally asked: {original_message}
-Action taken: {action_taken}
-Function result: {function_result}
-SUCCESS STATUS: {was_successful} ⚠️ CRITICAL: Check this first!
+    SUCCESS STATUS: {was_successful}
 
-Generate a natural, helpful customer service response. If was_successful is False, explain the error clearly and helpfully. DO NOT make up information when the function failed.""")
+    Order Details:
+    - Order ID: {order_id}
+    - Total Items: {total_items}
+    - All Items Status: {all_status}
+    - Items List: {items_list}
+    - Error (if any): {error}
+
+    Generate a response based on the SUCCESS STATUS above.""")
         ])
         
         return prompt | self.llm
@@ -443,24 +431,77 @@ Generate a natural, helpful customer service response. If was_successful is Fals
             }
     
     async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict, was_successful: bool, conversation_context: str = "") -> str:
-        """Use AI to generate natural customer service response with conversation context"""
+        """Generate response optimized for multi-item orders"""
         try:
-            response = await asyncio.to_thread(
-                self.response_generator.invoke,
-                {
-                    "original_message": original_message,
-                    "action_taken": action_taken,
-                    "function_result": json.dumps(function_result, indent=2),
-                    "was_successful": was_successful,
-                    "conversation_context": conversation_context
-                }
-            )
+            if action_taken == "check_order":
+                # Extract and format order data clearly
+                order_id = function_result.get("order_id", "Unknown")
+                total_items = function_result.get("totalItems", 0)
+                error = function_result.get("error", "None")
+                
+                # Format items list for AI
+                items_list = ""
+                all_status = "Unknown"
+                
+                if was_successful and function_result.get("itemsSummary"):
+                    items = function_result["itemsSummary"]
+                    items_list = "\n".join([
+                        f"• {item.get('name', 'Unknown Item')} "
+                        f"({', '.join([f'{k}: {v}' for k, v in item.get('options', {}).items()])})"
+                        f" - {item.get('shipmentStatus', 'Unknown')}"
+                        for item in items[:8]  # Show first 8 items
+                    ])
+                    
+                    if len(items) > 8:
+                        items_list += f"\n• ... and {len(items) - 8} more items"
+                    
+                    # Determine overall status
+                    statuses = [item.get('shipmentStatus', 'Unknown') for item in items]
+                    unique_statuses = list(set(statuses))
+                    if len(unique_statuses) == 1:
+                        all_status = f"All items are {unique_statuses[0]}"
+                    else:
+                        all_status = f"Mixed statuses: {', '.join(unique_statuses)}"
+                
+                response = await asyncio.to_thread(
+                    self.response_generator.invoke,
+                    {
+                        "original_message": original_message,
+                        "was_successful": was_successful,
+                        "order_id": order_id,
+                        "total_items": total_items,
+                        "all_status": all_status,
+                        "items_list": items_list,
+                        "error": error
+                    }
+                )
+                
+                return response.content if hasattr(response, 'content') else str(response)
             
-            return response.content if hasattr(response, 'content') else str(response)
-            
+            else:
+                # For non-order actions, use the original method
+                response = await asyncio.to_thread(
+                    self.response_generator.invoke,
+                    {
+                        "conversation_context": conversation_context,
+                        "original_message": original_message,
+                        "action_taken": action_taken,
+                        "function_result": json.dumps(function_result, indent=2),
+                        "was_successful": was_successful
+                    }
+                )
+                
+                return response.content if hasattr(response, 'content') else str(response)
+                
         except Exception as e:
             print(f"❌ Error generating natural response: {e}")
-            # Fallback to structured response
+            
+            # Smart fallback for successful orders
+            if was_successful and function_result.get("type") == "order_status":
+                order_id = function_result.get("order_id", "your order")
+                total = function_result.get("totalItems", 0)
+                return f"✅ Perfect! I found {order_id} with {total} items. All items are currently being processed and you'll receive tracking information soon. Anything specific you'd like to know about your order?"
+            
             return await self._create_fallback_response(function_result, was_successful)
     
     async def _generate_contextual_help(self, topic: str) -> Dict[str, Any]:
