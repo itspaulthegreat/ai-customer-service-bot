@@ -1,420 +1,429 @@
-"""
-AI-Driven Customer Service Agent - Complete Refactor
-This removes all regex/pattern matching and uses LLM for everything
-"""
+# src/bot/pure_ai_agent.py - Updated to pass user_id correctly
 
-# src/bot/agent.py
 import asyncio
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from src.config.settings import Settings
 
-class CustomerServiceAgent:
-    """AI-driven customer service agent that uses LLM for all decision making"""
+class PureAIAgent:
+    """Pure AI-driven customer service agent with zero pattern matching"""
     
     def __init__(self, groq_api_key: str, wix_client):
-        self.settings = Settings()
         self.wix_client = wix_client
         
         # Initialize LLM
         try:
             self.llm = ChatGroq(
-                model_name=self.settings.LLM_MODEL,
-                temperature=self.settings.LLM_TEMPERATURE,
-                max_tokens=self.settings.LLM_MAX_TOKENS,
+                model_name="llama-3.3-70b-versatile",
+                temperature=0.1,
+                max_tokens=1200,
                 groq_api_key=groq_api_key
             )
-            print("✅ Groq LLM initialized successfully")
+            print("✅ Pure AI Agent LLM initialized")
         except Exception as e:
-            print(f"❌ Error initializing Groq: {e}")
+            print(f"❌ Error initializing LLM in Pure AI Agent: {e}")
             raise
         
-        # Available tools/functions
-        self.available_functions = {
-            "get_new_arrivals": self._get_new_arrivals,
-            "get_mens_products": self._get_mens_products,
-            "get_womens_products": self._get_womens_products,
-            "search_products": self._search_products,
-            "get_order_status": self._get_order_status,
-            "get_order_items": self._get_order_items,
-            "provide_general_support": self._provide_general_support
-        }
-        
-        # Create the main agent
-        self.intent_classifier = self._create_intent_classifier()
+        # Create AI chains
+        self.intent_analyzer = self._create_intent_analyzer()
         self.response_generator = self._create_response_generator()
         
-        print("✅ AI-driven customer service agent initialized")
+        print("✅ Pure AI Agent initialized - NO REGEX, NO PATTERNS!")
     
-    def _create_intent_classifier(self):
-        """Create LLM chain for intent classification and parameter extraction"""
+    def _create_intent_analyzer(self):
+        """AI that understands customer intent and extracts parameters"""
         
-        system_prompt = """You are an AI assistant that analyzes customer messages to determine intent and extract relevant parameters.
+        system_prompt = """You are an AI assistant that analyzes customer messages for an online clothing store.
 
-Available functions and when to use them:
-- get_new_arrivals: When customers ask about new arrivals, latest products, what's new, fresh items, just added items
-- get_mens_products: When specifically asking for men's/male products, men's clothing, men's new arrivals
-- get_womens_products: When specifically asking for women's/female products, women's clothing, women's new arrivals  
-- search_products: When looking for specific products, brands, categories, or searching with keywords
-- get_order_status: When asking about order status, tracking, shipment status, delivery updates, "where is my order"
-- get_order_items: When asking about what items are in an order, order contents, order details
-- provide_general_support: For greetings, general questions, store info, policies, shipping info, returns, contact info
+Your job is to understand what the customer wants and extract relevant information intelligently.
 
-Analyze the user message and respond with JSON containing:
-{
-    "intent": "function_name",
-    "confidence": 0.0-1.0,
-    "parameters": {
+Available actions you can recommend:
+1. "show_new_arrivals" - Customer wants to see new/latest products
+2. "show_mens_products" - Customer specifically wants men's items
+3. "show_womens_products" - Customer specifically wants women's items
+4. "search_products" - Customer is looking for specific items with search terms
+5. "check_order" - Customer wants order status/tracking information
+6. "general_help" - General questions, greetings, store policies, support
+
+For each message, respond with JSON only using this format:
+{{
+    "action": "action_name",
+    "parameters": {{
         "key": "value"
-    },
-    "reasoning": "Brief explanation of why this intent was chosen"
-}
+    }},
+    "confidence": 0.95,
+    "reasoning": "Brief explanation"
+}}
 
-For order-related queries, extract order IDs from natural language:
-- "Check my order #12345" -> order_id: "12345"  
-- "Status of order ABC123" -> order_id: "ABC123"
-- "Where is order_QsItdDdq8jJJMT" -> order_id: "order_QsItdDdq8jJJMT"
-- "Track order #order_ABC123XYZ" -> order_id: "order_ABC123XYZ"
+Parameter extraction examples:
+- Order queries: Extract order IDs naturally
+  * "Check my order ABC123" → order_id: "ABC123"
+  * "Status of #order_XYZ789" → order_id: "order_XYZ789"  
+  * "Where is order_QsItdDdq8jJJMT" → order_id: "order_QsItdDdq8jJJMT"
 
-For product searches, extract search terms:
-- "Show me blue shirts" -> query: "blue shirts"
-- "Do you have Nike shoes?" -> query: "Nike shoes"
-- "Red dresses under $50" -> query: "red dresses", price_filter: "under 50"
+- Product searches: Extract search terms and filters
+  * "Red Nike shoes" → query: "red Nike shoes"
+  * "Blue dresses under $50" → query: "blue dresses", price_filter: "under 50"
+  * "Men's winter jackets" → query: "winter jackets", category: "mens"
 
-Always extract the most relevant parameters from the natural language."""
+- Quantity limits: Extract from natural language
+  * "Show me 10 items" → limit: 10
+  * "First 5 products" → limit: 5
+  * Default to 8 if not specified
+
+Be intelligent about understanding context and variations in language."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", "Analyze this customer message: {message}")
         ])
         
-        parser = JsonOutputParser()
-        return prompt | self.llm | parser
+        return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """Create LLM chain for generating customer responses"""
+        """AI that generates natural customer service responses"""
         
-        system_prompt = """You are a friendly, helpful customer service representative for an online clothing store.
+        system_prompt = """You are a friendly, professional customer service representative for an online clothing store.
+
+Create natural, engaging responses based on the function results provided.
 
 Guidelines:
-- Be warm, professional, and conversational
-- Use appropriate emojis to make responses engaging
-- Keep responses concise but informative
-- If you have product data, format it nicely with prices, availability, and links
-- For order status, explain clearly what the status means and next steps
-- For errors, be apologetic and offer alternatives
+- Be warm, conversational, and helpful
+- Use appropriate emojis to make responses engaging (but don't overdo it)
+- Format product information attractively with prices and availability
+- Explain order status clearly with next steps for customers
+- For errors, be apologetic and suggest helpful alternatives
 - Always end with an offer to help further
 
-When formatting product lists:
-- Use bullet points or numbered lists
-- Include product name, price, and availability
-- Add direct links when available
-- Highlight any sales or special offers
+For product listings:
+- Use clean formatting with bullet points or numbers
+- Include product name, price, and stock status
+- Add direct product links when available
+- Highlight any sales or special offers with emphasis
 
-When handling order status:
-- Clearly explain what each status means
+For order status:
+- Clearly explain what each status means in customer-friendly terms
 - Provide expected timeframes when possible
-- Offer next steps or contact info if needed
+- Offer next steps or contact information if needed
+- Be reassuring and professional
 
-Response format should be natural conversation, not JSON."""
+For errors or issues:
+- Acknowledge the problem apologetically
+- Suggest practical alternatives or solutions
+- Maintain a helpful and positive tone
+
+Response should be natural conversation, not JSON or structured data."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", """Generate a customer service response based on:
-
-Customer message: {original_message}
-Function used: {function_name}
+            ("human", """
+Customer originally asked: {original_message}
+Action taken: {action_taken}
 Function result: {function_result}
-Success: {success}
+Success: {was_successful}
 
-Create a natural, helpful response.""")
+Generate a natural, helpful customer service response.""")
         ])
         
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using AI for everything"""
+        """Process customer message using pure AI intelligence"""
         try:
-            print(f"🤖 AI Agent processing: {message}")
+            print(f"🤖 Pure AI processing: {message} (user_id: {user_id})")
             
-            # Step 1: Use LLM to classify intent and extract parameters
-            intent_analysis = await self._analyze_intent(message)
-            print(f"🧠 Intent Analysis: {intent_analysis}")
+            # Step 1: AI analyzes intent and extracts parameters (no regex!)
+            intent_result = await asyncio.to_thread(
+                self.intent_analyzer.invoke,
+                {"message": message}
+            )
             
-            function_name = intent_analysis.get("intent")
-            parameters = intent_analysis.get("parameters", {})
-            confidence = intent_analysis.get("confidence", 0.8)
+            print(f"🧠 AI Intent Analysis: {intent_result}")
             
-            # Step 2: Execute the appropriate function
-            if function_name in self.available_functions:
-                function_result = await self.available_functions[function_name](**parameters)
-                success = function_result.get("success", True)
-            else:
-                # Fallback to general support
-                function_result = await self._provide_general_support(query=message)
-                function_name = "provide_general_support"
-                success = True
+            action = intent_result.get("action", "general_help")
+            parameters = intent_result.get("parameters", {})
+            confidence = intent_result.get("confidence", 0.8)
+            reasoning = intent_result.get("reasoning", "")
             
-            print(f"🔧 Function {function_name} result: {success}")
+            # CRITICAL: Pass user_id to action execution
+            if user_id:
+                parameters["user_id"] = user_id
             
-            # Step 3: Use LLM to generate natural response
-            response_text = await self._generate_response(
+            # Step 2: Execute the appropriate action
+            action_result = await self._execute_action(action, parameters)
+            
+            print(f"🔧 Action '{action}' executed: {action_result.get('success', False)}")
+            
+            # Step 3: AI generates natural customer response
+            response_text = await self._generate_natural_response(
                 original_message=message,
-                function_name=function_name,
-                function_result=function_result,
-                success=success
+                action_taken=action,
+                function_result=action_result,
+                was_successful=action_result.get("success", True)
             )
             
             return {
                 "response": response_text,
                 "confidence": confidence,
-                "intent": function_name,
-                "success": success
+                "action": action,
+                "success": action_result.get("success", True),
+                "reasoning": reasoning
             }
             
         except Exception as e:
-            print(f"❌ Error in AI agent: {e}")
+            print(f"❌ Error in Pure AI Agent: {e}")
             import traceback
             traceback.print_exc()
             
-            # Use LLM for error response too
-            error_response = await self._generate_error_response(message, str(e))
-            return {
-                "response": error_response,
-                "confidence": 0.3,
-                "intent": "error",
-                "success": False
-            }
+            # Even error handling uses AI
+            return await self._handle_error_intelligently(message, str(e))
     
-    async def _analyze_intent(self, message: str) -> Dict[str, Any]:
-        """Use LLM to analyze customer intent"""
+    async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the determined action using Wix API"""
         try:
-            result = await asyncio.to_thread(
-                self.intent_classifier.invoke,
-                {"message": message}
-            )
-            return result
+            user_id = params.get("user_id")  # Extract user_id from params
+            
+            if action == "show_new_arrivals":
+                limit = params.get("limit", 8)
+                products = await self.wix_client.get_new_arrivals(limit)
+                return {
+                    "success": True,
+                    "type": "new_arrivals",
+                    "products": products,
+                    "count": len(products),
+                    "limit_requested": limit
+                }
+            
+            elif action == "show_mens_products":
+                limit = params.get("limit", 8)
+                products = await self.wix_client.get_mens_products(limit)
+                return {
+                    "success": True,
+                    "type": "mens_products",
+                    "products": products,
+                    "count": len(products),
+                    "category": "men's"
+                }
+            
+            elif action == "show_womens_products":
+                limit = params.get("limit", 8)
+                products = await self.wix_client.get_womens_products(limit)
+                return {
+                    "success": True,
+                    "type": "womens_products",
+                    "products": products,
+                    "count": len(products),
+                    "category": "women's"
+                }
+            
+            elif action == "search_products":
+                query = params.get("query", "")
+                limit = params.get("limit", 8)
+                
+                if not query:
+                    return {
+                        "success": False,
+                        "error": "No search query provided",
+                        "type": "search_error"
+                    }
+                
+                products = await self.wix_client.search_products(query, limit)
+                return {
+                    "success": True,
+                    "type": "search_results",
+                    "products": products,
+                    "count": len(products),
+                    "search_query": query
+                }
+            
+            elif action == "check_order":
+                order_id = params.get("order_id", "")
+                
+                if not order_id:
+                    return {
+                        "success": False,
+                        "error": "No order ID provided",
+                        "type": "order_error",
+                        "help_message": "Please provide your order ID to check status"
+                    }
+                
+                if not user_id:
+                    return {
+                        "success": False,
+                        "error": "User authentication required to check order status",
+                        "type": "auth_error",
+                        "help_message": "Please make sure you're logged in to check your order status"
+                    }
+                
+                print(f"🔍 Checking order status for: {order_id} (user: {user_id})")
+                # CRITICAL: Pass user_id to the order API
+                order_info = await self.wix_client.get_order_items(order_id, user_id)
+                
+                return {
+                    "success": order_info.get("success", False),
+                    "type": "order_status",
+                    "order_id": order_id,
+                    "order_data": order_info,
+                    "error": order_info.get("error") if not order_info.get("success") else None
+                }
+            
+            elif action == "general_help":
+                topic = params.get("topic", params.get("query", "general help"))
+                help_response = await self._generate_contextual_help(topic)
+                return help_response
+            
+            else:
+                # Fallback to general help
+                return await self._generate_contextual_help("general assistance")
+                
         except Exception as e:
-            print(f"❌ Error in intent analysis: {e}")
-            # Fallback
+            print(f"❌ Error executing action '{action}': {e}")
             return {
-                "intent": "provide_general_support",
-                "confidence": 0.5,
-                "parameters": {"query": message},
-                "reasoning": "Fallback due to analysis error"
+                "success": False,
+                "error": str(e),
+                "action": action,
+                "type": "execution_error"
             }
     
-    async def _generate_response(self, original_message: str, function_name: str, function_result: Dict, success: bool) -> str:
-        """Use LLM to generate natural customer response"""
+    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict, was_successful: bool) -> str:
+        """Use AI to generate natural customer service response"""
         try:
-            result = await asyncio.to_thread(
+            response = await asyncio.to_thread(
                 self.response_generator.invoke,
                 {
                     "original_message": original_message,
-                    "function_name": function_name,
+                    "action_taken": action_taken,
                     "function_result": json.dumps(function_result, indent=2),
-                    "success": success
+                    "was_successful": was_successful
                 }
             )
-            return result.content if hasattr(result, 'content') else str(result)
+            
+            return response.content if hasattr(response, 'content') else str(response)
+            
         except Exception as e:
-            print(f"❌ Error generating response: {e}")
-            return "I'm here to help! Could you please try rephrasing your question?"
+            print(f"❌ Error generating natural response: {e}")
+            # Fallback to structured response
+            return await self._create_fallback_response(function_result, was_successful)
     
-    async def _generate_error_response(self, original_message: str, error: str) -> str:
-        """Generate error response using LLM"""
+    async def _generate_contextual_help(self, topic: str) -> Dict[str, Any]:
+        """Generate contextual help using AI"""
+        help_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a helpful customer service representative for an online clothing store.
+
+Generate informative, friendly responses about our store and services.
+
+Topics you can help with:
+- New arrivals and latest fashion trends
+- Store policies (shipping, returns, exchanges, sizing)
+- How to browse and find products
+- Order tracking and customer support
+- General shopping guidance and store information
+- Product categories and recommendations
+
+Be warm, professional, and informative. Use appropriate emojis and provide actionable advice."""),
+            ("human", "Customer needs help with: {topic}")
+        ])
+        
+        try:
+            chain = help_prompt | self.llm
+            result = await asyncio.to_thread(
+                chain.invoke,
+                {"topic": topic or "general store information"}
+            )
+            
+            help_text = result.content if hasattr(result, 'content') else str(result)
+            
+            return {
+                "success": True,
+                "type": "help_response",
+                "response": help_text,
+                "topic": topic
+            }
+            
+        except Exception as e:
+            print(f"❌ Error generating contextual help: {e}")
+            return {
+                "success": True,
+                "type": "help_response",
+                "response": "👋 I'm here to help! I can show you our new arrivals, assist with order questions, provide store information, and help you find what you're looking for. What would you like to know?",
+                "topic": topic
+            }
+    
+    async def _create_fallback_response(self, result: Dict, success: bool) -> str:
+        """Create fallback response when AI generation fails"""
+        if success:
+            result_type = result.get("type", "unknown")
+            
+            if result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
+                count = result.get("count", 0)
+                if count > 0:
+                    return f"🛍️ Great! I found {count} products for you. Take a look and let me know if you need anything else!"
+                else:
+                    return "😔 I couldn't find any products matching your request right now. Would you like to try a different search or see our new arrivals instead?"
+            
+            elif result_type == "order_status":
+                order_id = result.get("order_id", "")
+                return f"📦 I found information about your order {order_id}. Let me know if you need more details or have other questions!"
+            
+            elif result_type == "help_response":
+                return result.get("response", "I'm here to help! What can I assist you with today?")
+            
+            else:
+                return "✅ I've processed your request! How else can I help you today?"
+        
+        else:
+            error = result.get("error", "")
+            result_type = result.get("type", "")
+            
+            if "order" in result_type or "order" in error.lower():
+                return "❌ I couldn't find that order. Please double-check your order ID and make sure you're logged in, or contact our customer service team for assistance."
+            elif "auth" in result_type:
+                return "🔐 Please make sure you're logged in to check your order status. Once logged in, I'll be happy to help you track your orders!"
+            elif "search" in result_type:
+                return "🔍 I couldn't find products matching that search. Would you like to try different keywords or browse our new arrivals instead?"
+            else:
+                return "😔 I encountered an issue processing your request. Please try again or let me know how else I can help!"
+    
+    async def _handle_error_intelligently(self, message: str, error: str) -> Dict[str, Any]:
+        """Use AI to handle errors gracefully"""
         error_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Generate a friendly, apologetic customer service response for when there's a technical error. Be helpful and suggest alternatives."),
-            ("human", "Customer asked: {message}\nError occurred: {error}\nGenerate a helpful response.")
+            ("system", "You are a customer service representative handling a technical error. Generate a helpful, apologetic response that maintains customer confidence and suggests alternatives. Be warm and professional."),
+            ("human", "Customer asked: {message}\nTechnical error occurred: {error}\nGenerate a helpful response.")
         ])
         
         try:
             chain = error_prompt | self.llm
             result = await asyncio.to_thread(
                 chain.invoke,
-                {"message": original_message, "error": error}
-            )
-            return result.content if hasattr(result, 'content') else str(result)
-        except:
-            return "I apologize, but I'm experiencing some technical difficulties. Please try again in a moment or contact our customer service team for immediate assistance."
-    
-    # ============== FUNCTION IMPLEMENTATIONS ==============
-    
-    async def _get_new_arrivals(self, limit: int = 8, **kwargs) -> Dict[str, Any]:
-        """Get new arrivals from Wix"""
-        try:
-            products = await self.wix_client.get_new_arrivals(limit)
-            return {
-                "success": True,
-                "function": "get_new_arrivals",
-                "data": {
-                    "products": products,
-                    "count": len(products),
-                    "store_url": self.wix_client.base_url
-                }
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "function": "get_new_arrivals", 
-                "error": str(e)
-            }
-    
-    async def _get_mens_products(self, limit: int = 8, **kwargs) -> Dict[str, Any]:
-        """Get men's products from Wix"""
-        try:
-            products = await self.wix_client.get_mens_products(limit)
-            return {
-                "success": True,
-                "function": "get_mens_products",
-                "data": {
-                    "products": products,
-                    "count": len(products),
-                    "category": "men",
-                    "store_url": self.wix_client.base_url
-                }
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "function": "get_mens_products",
-                "error": str(e)
-            }
-    
-    async def _get_womens_products(self, limit: int = 8, **kwargs) -> Dict[str, Any]:
-        """Get women's products from Wix"""
-        try:
-            products = await self.wix_client.get_womens_products(limit)
-            return {
-                "success": True,
-                "function": "get_womens_products",
-                "data": {
-                    "products": products,
-                    "count": len(products),
-                    "category": "women",
-                    "store_url": self.wix_client.base_url
-                }
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "function": "get_womens_products",
-                "error": str(e)
-            }
-    
-    async def _search_products(self, query: str, limit: int = 8, **kwargs) -> Dict[str, Any]:
-        """Search products in Wix"""
-        try:
-            products = await self.wix_client.search_products(query, limit)
-            return {
-                "success": True,
-                "function": "search_products",
-                "data": {
-                    "products": products,
-                    "count": len(products),
-                    "search_query": query,
-                    "store_url": self.wix_client.base_url
-                }
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "function": "search_products",
-                "error": str(e),
-                "search_query": query
-            }
-    
-    async def _get_order_status(self, order_id: str, user_id: str = None, **kwargs) -> Dict[str, Any]:
-        """Get order status - AI extracted order ID"""
-        try:
-            print(f"🔍 AI extracted order ID: {order_id}, user_id: {user_id}")
-            
-            # Try to get order items (main order data) - pass user_id
-            order_result = await self.wix_client.get_order_items(order_id, user_id)
-            
-            if order_result.get("success"):
-                return {
-                    "success": True,
-                    "function": "get_order_status",
-                    "data": {
-                        "order_id": order_id,
-                        "order_info": order_result,
-                        "items_count": order_result.get("totalItems", 0)
-                    }
-                }
-            else:
-                return {
-                    "success": False,
-                    "function": "get_order_status",
-                    "error": order_result.get("error", "Order not found"),
-                    "order_id": order_id
-                }
-                
-        except Exception as e:
-            return {
-                "success": False,
-                "function": "get_order_status",
-                "error": str(e),
-                "order_id": order_id
-            }
-    async def _get_order_items(self, order_id: str, **kwargs) -> Dict[str, Any]:
-        """Get detailed order items"""
-        return await self._get_order_status(order_id, **kwargs)
-    
-    async def _provide_general_support(self, query: str = "", **kwargs) -> Dict[str, Any]:
-        """Provide general customer support"""
-        try:
-            # Use LLM to generate contextual support response
-            support_prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a helpful customer service representative. Provide helpful information about:
-                - Store policies (shipping, returns, exchanges)
-                - How to find products and new arrivals
-                - General shopping guidance
-                - Contact information and store hours
-                - Size guides and product information
-                
-                Be concise but helpful. Include relevant emojis."""),
-                ("human", "Customer query: {query}")
-            ])
-            
-            support_chain = support_prompt | self.llm
-            result = await asyncio.to_thread(
-                support_chain.invoke,
-                {"query": query}
+                {"message": message, "error": error}
             )
             
             response_text = result.content if hasattr(result, 'content') else str(result)
             
-            return {
-                "success": True,
-                "function": "provide_general_support",
-                "data": {
-                    "response": response_text,
-                    "query": query
-                }
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "function": "provide_general_support",
-                "error": str(e),
-                "data": {
-                    "response": "I'm here to help! I can show you our new arrivals, help with order questions, and provide store information. What would you like to know?",
-                    "query": query
-                }
-            }
+        except Exception:
+            # Ultimate fallback
+            response_text = "I apologize for the technical difficulty. Our team is working to resolve this. Please try again in a moment, or contact our customer service team for immediate assistance. I'm here to help in any way I can!"
+        
+        return {
+            "response": response_text,
+            "confidence": 0.3,
+            "action": "error_handling",
+            "success": False,
+            "error": error
+        }
     
     def is_healthy(self) -> bool:
-        """Check if agent is healthy"""
+        """Check if the Pure AI agent is working properly"""
         try:
+            # Check if all components are initialized
             return (
                 hasattr(self, 'llm') and self.llm is not None and
                 hasattr(self, 'wix_client') and self.wix_client is not None and
-                hasattr(self, 'available_functions') and self.available_functions
+                hasattr(self, 'intent_analyzer') and self.intent_analyzer is not None and
+                hasattr(self, 'response_generator') and self.response_generator is not None
             )
-        except:
+        except Exception as e:
+            print(f"❌ Health check failed: {e}")
             return False
