@@ -126,7 +126,9 @@ Analyze this customer message considering the conversation context above.""")
     4. **If SUCCESS = FALSE**:
     - Then and only then say the order wasn't found
     - Suggest checking order ID or account
-
+    5. For memory/context questions:
+    - Answer directly about what was said before
+    - Be specific and helpful when referencing previous messages
     EXAMPLES OF GOOD RESPONSES:
 
     For successful multi-item order:
@@ -141,7 +143,7 @@ Analyze this customer message considering the conversation context above.""")
     • TSS Originals: Killin' It (Size M) - Pending
 
     All items are currently pending and being prepared for shipment! You'll receive tracking information once they ship. Is there anything specific about any of these items you'd like to know more about?"
-
+    
     Be conversational, positive, and helpful. Use emojis appropriately."""
 
         prompt = ChatPromptTemplate.from_messages([
