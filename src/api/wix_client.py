@@ -156,15 +156,22 @@ class WixAPIClient:
 
     # ============== NEW ORDER STATUS METHODS ==============
 
-    async def get_order_items(self, order_id: str) -> Dict[str, Any]:
+# Add this method to your WixAPIClient class in src/api/wix_client.py
+
+    async def get_order_items(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
         """Get all items in an order - Bot accessible"""
         try:
-            print(f"📋 Fetching order items for order: {order_id}")
+            print(f"📋 Fetching order items for order: {order_id}, user: {user_id}")
             
             headers = {
                 'User-Agent': 'ai-customer-service-bot/2.0',
                 'X-Bot-Request': 'true'
             }
+            
+            # 🆕 CRITICAL: Pass user ID in headers for Wix backend authentication
+            if user_id:
+                headers['X-User-Id'] = user_id
+                print(f"🔑 Added user ID to headers: {user_id}")
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -199,15 +206,19 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
-    async def get_order_item_status(self, order_id: str, catalog_item_id: str) -> Dict[str, Any]:
+    async def get_order_item_status(self, order_id: str, catalog_item_id: str, user_id: str = None) -> Dict[str, Any]:
         """Get specific order item status - Bot accessible"""
         try:
-            print(f"📦 Fetching order item status for order: {order_id}, item: {catalog_item_id}")
+            print(f"📦 Fetching order item status for order: {order_id}, item: {catalog_item_id}, user: {user_id}")
             
             headers = {
                 'User-Agent': 'ai-customer-service-bot/2.0',
                 'X-Bot-Request': 'true'
             }
+            
+            # 🆕 CRITICAL: Pass user ID in headers
+            if user_id:
+                headers['X-User-Id'] = user_id
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -242,15 +253,19 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
-    async def get_order_summary(self, order_id: str) -> Dict[str, Any]:
+    async def get_order_summary(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
         """Get order summary - Bot accessible with limited fields"""
         try:
-            print(f"📊 Fetching order summary for order: {order_id}")
+            print(f"📊 Fetching order summary for order: {order_id}, user: {user_id}")
             
             headers = {
                 'User-Agent': 'ai-customer-service-bot/2.0',
                 'X-Bot-Request': 'true'
             }
+            
+            # 🆕 CRITICAL: Pass user ID in headers
+            if user_id:
+                headers['X-User-Id'] = user_id
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -284,7 +299,6 @@ class WixAPIClient:
                 "error": str(e),
                 "code": "NETWORK_ERROR"
             }
-
     # Legacy method for backward compatibility
     async def get_order_status(self, order_id: str) -> Optional[Dict[str, Any]]:
         """Legacy order status method - For backward compatibility"""

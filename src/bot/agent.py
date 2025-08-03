@@ -327,13 +327,13 @@ Create a natural, helpful response.""")
                 "search_query": query
             }
     
-    async def _get_order_status(self, order_id: str, **kwargs) -> Dict[str, Any]:
+    async def _get_order_status(self, order_id: str, user_id: str = None, **kwargs) -> Dict[str, Any]:
         """Get order status - AI extracted order ID"""
         try:
-            print(f"🔍 AI extracted order ID: {order_id}")
+            print(f"🔍 AI extracted order ID: {order_id}, user_id: {user_id}")
             
-            # Try to get order items (main order data)
-            order_result = await self.wix_client.get_order_items(order_id)
+            # Try to get order items (main order data) - pass user_id
+            order_result = await self.wix_client.get_order_items(order_id, user_id)
             
             if order_result.get("success"):
                 return {
@@ -360,7 +360,6 @@ Create a natural, helpful response.""")
                 "error": str(e),
                 "order_id": order_id
             }
-    
     async def _get_order_items(self, order_id: str, **kwargs) -> Dict[str, Any]:
         """Get detailed order items"""
         return await self._get_order_status(order_id, **kwargs)
