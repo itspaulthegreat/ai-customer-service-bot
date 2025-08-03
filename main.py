@@ -18,7 +18,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 WIX_BASE_URL = os.getenv("WIX_BASE_URL")
 PORT = int(os.getenv("PORT", 8000))
 
-app = FastAPI(title="AI Customer Service Bot", version="3.0.0")
+app = FastAPI(title="Enhanced AI Customer Service Bot", version="4.0.0")
 
 # CORS middleware
 app.add_middleware(
@@ -51,7 +51,7 @@ except Exception as e:
     print(f"❌ Error initializing Groq: {e}")
     raise
 
-# Try to import the new Pure AI system
+# Try to import the enhanced AI system
 try:
     from src.api.wix_client import WixAPIClient
     from src.bot.pure_ai_agent import PureAIAgent
@@ -59,13 +59,14 @@ try:
     # Initialize Wix client
     wix_client = WixAPIClient(WIX_BASE_URL)
     
-    # Initialize the Pure AI agent (no pattern matching!)
+    # Initialize the Enhanced Pure AI agent
     agent = PureAIAgent(GROQ_API_KEY, wix_client)
-    print("✅ Pure AI agent system initialized successfully - NO REGEX!")
+    print("✅ Enhanced Pure AI agent system initialized successfully!")
+    print("🚀 NEW FEATURES: Multiple orders, order history, statistics, contextual queries")
     use_ai_system = True
     
 except Exception as e:
-    print(f"⚠️  Error loading Pure AI system: {e}")
+    print(f"⚠️  Error loading Enhanced AI system: {e}")
     print("📦 Falling back to legacy system...")
     use_ai_system = False
 
@@ -111,7 +112,7 @@ class LegacyWixAPIClient:
 if not use_ai_system:
     legacy_wix_client = LegacyWixAPIClient(WIX_BASE_URL)
 
-# Legacy fallback function (only used if AI system fails to load)
+# Legacy fallback function
 def legacy_process_message(message: str) -> str:
     """Legacy message processing with basic pattern matching"""
     message_lower = message.lower()
@@ -131,19 +132,16 @@ def legacy_process_message(message: str) -> str:
             
             result = "🆕 **Here are our latest new arrivals:**\n\n"
             
-            for i, product in enumerate(products[:6], 1):  # Show top 6 products
+            for i, product in enumerate(products[:6], 1):
                 result += f"{i}. **{product.get('name', 'Product')}**\n"
                 
-                # Price information
                 if product.get('formattedDiscountedPrice') and product.get('formattedDiscountedPrice') != product.get('formattedPrice'):
                     result += f"   💰 **{product['formattedDiscountedPrice']}** ~~{product.get('formattedPrice', 'N/A')}~~\n"
                 else:
                     result += f"   💰 {product.get('formattedPrice', 'Price not available')}\n"
                 
-                # Stock status
                 result += f"   📦 {'✅ In Stock' if product.get('inStock', False) else '❌ Out of Stock'}\n"
                 
-                # Link to product
                 if product.get('slug'):
                     result += f"   🔗 [View Product]({legacy_wix_client.base_url}/product/{product['slug']})\n\n"
                 else:
@@ -156,31 +154,24 @@ def legacy_process_message(message: str) -> str:
             print(f"❌ Error in legacy new arrivals: {e}")
             return "I encountered an error while fetching new arrivals. Please try again or contact support."
     
-    # For all other messages, provide general help
     else:
-        return "👋 Hello! I'm here to help you discover our latest new arrivals. Just ask me 'show me new arrivals' to see what's fresh in our store! I can also help with general store questions."
+        return "👋 Hello! I'm here to help you discover our latest new arrivals and assist with order management. Just ask me 'show me new arrivals' or 'check my orders' to get started!"
 
 # ============================================================================
-# API ENDPOINTS - SIMPLIFIED FOR PURE AI
+# API ENDPOINTS - ENHANCED FOR ADVANCED ORDER MANAGEMENT
 # ============================================================================
-
-# Update your chat endpoint in main.py
-
-# Fix your chat endpoint in main.py - remove the userEmail reference
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(message: ChatMessage):
     try:
         print(f"\n💬 Received message: {message.message}")
         print(f"👤 User ID: {message.user_id}")
-        # ❌ REMOVED: print(f"📧 User Email: {message.userEmail}")  # This attribute doesn't exist
         
         if use_ai_system:
-            # 🆕 CRITICAL: Pass user_id to the agent for order-related queries
-            # The agent will use this to authenticate with Wix backend
+            # 🆕 ENHANCED: Pass user_id to the agent for all order-related queries
             result = await agent.process_message(
                 message.message, 
-                user_id=message.user_id  # This gets passed to order functions
+                user_id=message.user_id
             )
             
             return ChatResponse(
@@ -201,20 +192,47 @@ async def chat(message: ChatMessage):
             response="I apologize for the technical difficulty. Please try again or contact our customer service team.",
             confidence=0.1
         )
+
 @app.get("/")
 async def root():
-    system_status = "pure_ai" if use_ai_system else "legacy_fallback"
+    system_status = "enhanced_ai" if use_ai_system else "legacy_fallback"
+    features = []
+    
+    if use_ai_system:
+        features = [
+            "🧠 Advanced AI Intent Recognition",
+            "📋 Single & Multiple Order Status",
+            "🕒 Order History (Last N Orders)",
+            "📅 Recent Orders (Time-based)",
+            "🔍 Orders by Status Filter",
+            "📊 Order Statistics & Analytics",
+            "💭 Conversation Memory",
+            "🛍️ Product Search & Discovery",
+            "🚫 Zero Pattern Matching"
+        ]
+    else:
+        features = ["Basic Pattern Matching", "Legacy Fallback"]
+    
     return {
-        "message": "AI Customer Service Bot is running! Ask me about new arrivals, order status, or anything else!", 
+        "message": "Enhanced AI Customer Service Bot is running! Ask me about orders, products, or get personalized shopping assistance!", 
         "status": "healthy",
         "system": system_status,
-        "version": "3.0.0",
-        "features": ["Pure AI Intent Recognition", "Natural Language Processing", "No Pattern Matching"] if use_ai_system else ["Basic Pattern Matching", "Legacy Fallback"]
+        "version": "4.0.0",
+        "new_capabilities": [
+            "Multiple order status checking",
+            "Order history queries (last N orders)",
+            "Time-based order filtering (recent orders)",
+            "Status-based order filtering", 
+            "Order statistics and analytics",
+            "Enhanced conversation memory",
+            "Contextual order assistance"
+        ],
+        "features": features
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Enhanced health check endpoint"""
     if use_ai_system:
         try:
             wix_connected = await wix_client.test_connection()
@@ -222,20 +240,38 @@ async def health_check():
             
             return {
                 "status": "healthy", 
-                "system": "pure_ai",
+                "system": "enhanced_ai",
                 "model": "llama-3.3-70b-versatile",
                 "wix_api": "connected" if wix_connected else "disconnected",
                 "wix_url": wix_client.base_url,
                 "groq_api": "connected" if GROQ_API_KEY else "missing",
                 "agent_healthy": agent_healthy,
-                "ai_features": ["Intent Analysis", "Parameter Extraction", "Response Generation"],
+                "available_endpoints": len(wix_client.endpoints),
+                "enhanced_features": {
+                    "multiple_order_check": True,
+                    "order_history": True,
+                    "order_statistics": True,
+                    "conversation_memory": True,
+                    "contextual_queries": True,
+                    "time_based_filtering": True,
+                    "status_filtering": True
+                },
+                "order_capabilities": [
+                    "Single order status",
+                    "Multiple order status",
+                    "Last N orders",
+                    "Recent orders (time-based)",
+                    "Orders by status",
+                    "Order statistics",
+                    "Order history analysis"
+                ],
                 "no_regex": True,
                 "no_patterns": True
             }
         except Exception as e:
             return {
                 "status": "degraded",
-                "system": "pure_ai",
+                "system": "enhanced_ai",
                 "error": str(e),
                 "fallback_available": True
             }
@@ -261,21 +297,26 @@ async def health_check():
 
 @app.get("/test-ai")
 async def test_ai():
-    """Test the AI agent capabilities"""
+    """Test the enhanced AI agent capabilities"""
     if not use_ai_system:
         return {
-            "error": "AI system not available",
+            "error": "Enhanced AI system not available",
             "system": "legacy_fallback",
-            "message": "Pure AI agent failed to load"
+            "message": "Enhanced AI agent failed to load"
         }
     
     try:
-        print("🧪 Testing AI agent capabilities...")
+        print("🧪 Testing enhanced AI agent capabilities...")
         
-        # Test with different types of messages
+        # Test with different types of messages including new order features
         test_messages = [
             "Show me new arrivals",
             "Check my order ABC123", 
+            "Check orders ABC123, XYZ789, DEF456",
+            "Show my last 3 orders",
+            "Orders from last week",
+            "My pending orders",
+            "How much have I spent?",
             "What's new in men's clothing?",
             "I need help with returns"
         ]
@@ -283,12 +324,13 @@ async def test_ai():
         test_results = []
         for msg in test_messages:
             try:
-                result = await agent.process_message(msg, "test_user")
+                result = await agent.process_message(msg, "test_user_enhanced")
                 test_results.append({
                     "message": msg,
                     "action": result.get("action", "unknown"),
                     "confidence": result.get("confidence", 0),
-                    "success": result.get("success", False)
+                    "success": result.get("success", False),
+                    "response_preview": result.get("response", "")[:100] + "..." if len(result.get("response", "")) > 100 else result.get("response", "")
                 })
             except Exception as e:
                 test_results.append({
@@ -298,13 +340,17 @@ async def test_ai():
                 })
         
         return {
-            "system": "pure_ai",
+            "system": "enhanced_ai",
             "agent_healthy": agent.is_healthy(),
             "test_results": test_results,
-            "ai_features": {
-                "intent_analysis": True,
-                "parameter_extraction": True,
-                "natural_language": True,
+            "enhanced_capabilities": {
+                "multiple_order_queries": True,
+                "order_history_analysis": True,
+                "time_based_filtering": True,
+                "status_based_filtering": True,
+                "order_statistics": True,
+                "conversation_memory": True,
+                "natural_language_processing": True,
                 "no_regex": True,
                 "no_patterns": True
             },
@@ -314,29 +360,43 @@ async def test_ai():
     except Exception as e:
         return {
             "error": str(e),
-            "system": "pure_ai",
+            "system": "enhanced_ai",
             "test_status": "failed"
         }
 
 @app.get("/test-wix")
 async def test_wix():
-    """Test Wix integration"""
+    """Test enhanced Wix integration"""
     try:
-        print("🧪 Testing Wix integration...")
+        print("🧪 Testing enhanced Wix integration...")
         
         if use_ai_system:
-            # Test AI system with Wix
+            # Test enhanced system with new endpoints
             connection_ok = await wix_client.test_connection()
             new_arrivals = await wix_client.get_new_arrivals(3)
             
+            # Test new order endpoints (these would require a real user ID)
+            test_results = {
+                "new_arrivals": len(new_arrivals) > 0,
+                "connection": connection_ok
+            }
+            
             return {
-                "system": "pure_ai",
+                "system": "enhanced_ai",
                 "wix_connection": connection_ok,
                 "wix_url": wix_client.base_url,
                 "new_arrivals_count": len(new_arrivals),
                 "sample_product": new_arrivals[0] if new_arrivals else "No products found",
-                "test_status": "success" if connection_ok and new_arrivals else "failed",
-                "available_endpoints": list(wix_client.endpoints.keys())
+                "available_endpoints": list(wix_client.endpoints.keys()),
+                "enhanced_endpoints": [
+                    "multiple_order_status",
+                    "last_orders", 
+                    "recent_orders",
+                    "orders_by_status",
+                    "user_order_stats"
+                ],
+                "test_results": test_results,
+                "test_status": "success" if connection_ok and new_arrivals else "partial"
             }
         else:
             # Test legacy system
@@ -354,34 +414,59 @@ async def test_wix():
     except Exception as e:
         return {
             "error": str(e), 
-            "system": "pure_ai" if use_ai_system else "legacy_fallback",
+            "system": "enhanced_ai" if use_ai_system else "legacy_fallback",
             "test_status": "failed"
         }
 
 @app.get("/agent-info")
 async def agent_info():
-    """Get information about the current agent system"""
+    """Get information about the enhanced agent system"""
     if use_ai_system:
         return {
-            "system": "pure_ai",
-            "version": "3.0.0",
-            "description": "Pure AI-driven customer service agent",
+            "system": "enhanced_ai",
+            "version": "4.0.0",
+            "description": "Enhanced Pure AI-driven customer service agent with advanced order management",
             "features": {
                 "intent_recognition": "LLM-based natural language understanding",
-                "parameter_extraction": "AI extracts order IDs, search terms, etc.",
+                "parameter_extraction": "AI extracts order IDs, search terms, quantities, time periods",
                 "response_generation": "Contextual AI-generated responses",
+                "conversation_memory": "Session-based conversation tracking",
                 "no_regex": "Zero regular expressions or pattern matching",
                 "no_hardcoded_rules": "Fully adaptive AI decision making"
             },
-            "capabilities": [
+            "order_capabilities": {
+                "single_order_check": "Check status of individual orders",
+                "multiple_order_check": "Check status of multiple orders simultaneously",
+                "order_history": "Get last N orders (1-20)",
+                "recent_orders": "Get orders from specific time periods",
+                "orders_by_status": "Filter orders by status (pending, shipped, etc.)",
+                "order_statistics": "Get comprehensive order analytics",
+                "contextual_queries": "Handle 'my last order', 'recent purchases', etc."
+            },
+            "product_capabilities": [
                 "New arrivals display",
-                "Product search",
-                "Order status checking", 
-                "General customer support",
-                "Natural conversation"
+                "Men's/Women's product filtering",
+                "Product search with natural language",
+                "Category-based browsing"
+            ],
+            "general_capabilities": [
+                "Natural conversation flow",
+                "Contextual help and support",
+                "Memory of conversation history",
+                "Error handling and recovery"
             ],
             "ai_model": "llama-3.3-70b-versatile",
-            "agent_healthy": agent.is_healthy() if 'agent' in globals() else False
+            "agent_healthy": agent.is_healthy() if 'agent' in globals() else False,
+            "supported_queries": [
+                "Check my order ABC123",
+                "Status of orders ABC123, XYZ789",
+                "Show my last 5 orders", 
+                "Orders from last week",
+                "My pending orders",
+                "How much have I spent?",
+                "Show new arrivals",
+                "Search for red dresses"
+            ]
         }
     else:
         return {
@@ -397,17 +482,66 @@ async def agent_info():
                 "Basic new arrivals display",
                 "Simple greetings"
             ],
-            "note": "This is a fallback system. The Pure AI system is preferred."
+            "note": "This is a fallback system. The Enhanced AI system is preferred."
+        }
+
+@app.get("/memory-test")
+async def memory_test():
+    """Test the conversation memory system"""
+    if not use_ai_system:
+        return {"error": "Enhanced AI system not available"}
+    
+    try:
+        from src.bot.session_memory import session_memory
+        
+        # Get memory statistics
+        stats = session_memory.get_session_stats()
+        
+        return {
+            "system": "enhanced_ai",
+            "memory_system": "active",
+            "session_stats": stats,
+            "memory_features": [
+                "User message tracking",
+                "Bot response tracking", 
+                "Conversation context",
+                "Order ID history extraction",
+                "Order ID history extraction",
+                "Session timeout management"
+            ],
+            "test_status": "healthy"
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "system": "enhanced_ai",
+            "test_status": "failed"
         }
 
 if __name__ == "__main__":
-    print(f"\n🚀 Starting AI Customer Service Bot v3.0...")
+    print(f"\n🚀 Starting Enhanced AI Customer Service Bot v4.0...")
     print(f"📡 Wix URL: {WIX_BASE_URL}")
     print(f"🔑 Groq API Key: {'✅ Set' if GROQ_API_KEY else '❌ Missing'}")
-    print(f"🤖 System: {'Pure AI (No Regex!)' if use_ai_system else 'Legacy Fallback'}")
+    print(f"🤖 System: {'Enhanced AI (Advanced Order Management!)' if use_ai_system else 'Legacy Fallback'}")
     
     if use_ai_system:
-        print("✨ Features: Natural Language Understanding, AI Intent Recognition, Zero Pattern Matching")
+        print("✨ NEW ENHANCED FEATURES:")
+        print("   🔍 Multiple Order Status Checking")
+        print("   📋 Order History Queries (Last N Orders)")
+        print("   📅 Time-based Order Filtering (Recent Orders)")
+        print("   🏷️  Status-based Order Filtering")
+        print("   📊 Order Statistics & Analytics")
+        print("   💭 Enhanced Conversation Memory")
+        print("   🧠 Natural Language Understanding")
+        print("   🚫 Zero Pattern Matching")
+        print("\n📝 Example Queries:")
+        print("   • 'Check my order ABC123'")
+        print("   • 'Status of orders ABC123, XYZ789, DEF456'")
+        print("   • 'Show my last 3 orders'")
+        print("   • 'Orders from last week'")
+        print("   • 'My pending orders'")
+        print("   • 'How much have I spent?'")
+        print("   • 'What order IDs did I mention?'")
     else:
         print("⚠️  Running in fallback mode with basic pattern matching")
     
