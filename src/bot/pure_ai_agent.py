@@ -1,7 +1,7 @@
-# src/bot/pure_ai_agent.py - COMPLETE FIXED VERSION
-
+# src/bot/pure_ai_agent.py
 import asyncio
 import json
+import re
 from typing import Dict, Any, Optional
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from .session_memory import session_memory
 
 class PureAIAgent:
-    """Pure AI-driven customer service agent with session memory - FIXED ORDER HANDLING"""
+    """Pure AI-driven customer service agent with session memory"""
     
     def __init__(self, groq_api_key: str, wix_client):
         self.wix_client = wix_client
@@ -32,7 +32,7 @@ class PureAIAgent:
         self.intent_analyzer = self._create_intent_analyzer()
         self.response_generator = self._create_response_generator()
         
-        print("✅ Pure AI Agent initialized with SESSION MEMORY and FIXED ORDER HANDLING!")
+        print("✅ Pure AI Agent initialized with SESSION MEMORY!")
     
     def _create_intent_analyzer(self):
         """AI that understands customer intent and extracts parameters"""
@@ -66,6 +66,8 @@ Context awareness examples:
 - "What was my previous message?" → action: "remember_context", parameters: {{"type": "previous_user_message"}}
 - "What did you just tell me?" → action: "remember_context", parameters: {{"type": "previous_bot_message"}}
 - "What were we talking about?" → action: "remember_context", parameters: {{"type": "conversation_summary"}}
+- "What order IDs did I give you?" or "List all order IDs I mentioned" → action: "remember_context", parameters: {{"type": "order_id_history", "filter": "order_ids"}}
+- "What products did I ask about?" → action: "remember_context", parameters: {{"type": "entity_history", "filter": "product_queries"}}
 
 Parameter extraction examples:
 - Order queries: Extract order IDs naturally
@@ -84,7 +86,7 @@ Parameter extraction examples:
   * "First 5 products" → limit: 5
   * Default to 8 if not specified
 
-Be intelligent about understanding context and variations in language. Use conversation history to understand references."""
+Be intelligent about understanding context and variations in language (e.g., "order IDs I gave you" = "order IDs I mentioned"). Use conversation history to understand references."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -100,83 +102,95 @@ Analyze this customer message considering the conversation context above.""")
         return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """AI that generates natural customer service responses - FIXED ERROR HANDLING"""
+        """AI response generator optimized for multi-item orders, memory requests, and new arrivals"""
         
-        system_prompt = """You are a friendly, professional customer service representative for an online clothing store.
+        system_prompt = """You are a customer service representative for an online clothing store.
 
-CRITICAL INSTRUCTION: Always check if the function was successful before generating your response!
+    CRITICAL: Multi-item orders and product lists are NORMAL and EXPECTED!
 
-You have access to conversation history and should use it to provide contextual, personalized responses.
+    When handling requests, follow these guidelines based on the result type:
 
-Create natural, engaging responses based on the function results provided and conversation context.
+    1. **Order Status Requests (type = "order_status")**:
+    - **Check Success First**: Look at the "was_successful" field.
+    - **If SUCCESS = TRUE**:
+        - The order WAS FOUND successfully.
+        - Multiple items in one order are normal.
+        - Each item can have different sizes, colors, and shipping statuses.
+        - Respond positively and helpfully.
+        - For Multi-Item Orders (totalItems > 1):
+        - Congratulate them: "Great news! I found your order [order_id] with [total_items] items! 🛍️"
+        - List items clearly with names, sizes, and status from items_list.
+        - Group by status if multiple statuses exist in all_status.
+        - Example: "Your order includes:\n• Item 1 (Size M) - Pending\n• Item 2 (Size L) - Shipped"
+        - For Single-Item Orders (totalItems = 1):
+        - Provide detailed info: "I found your order [order_id] with 1 item! Your '[item_name] (Size [size])' is [status]."
+    - **If SUCCESS = FALSE**:
+        - Say the order wasn't found.
+        - Handle specific errors:
+        - "MISSING_USER_ID": Prompt user to log in.
+        - "UNAUTHORIZED": Suggest checking account or order ID.
+        - "NOT_FOUND": Suggest verifying order ID.
+        - Example: "I'm sorry, I couldn't find order [order_id]. Please double-check the ID."
 
-IMPORTANT ERROR HANDLING:
-- FIRST check the "Success" field in the function result
-- If Success is FALSE, explain the error apologetically and helpfully
-- Never claim an order exists or provide fake status when the function failed
-- For order status errors, be specific:
-  * UNAUTHORIZED = "Order not found for your account" 
-  * NOT_FOUND = "Order ID doesn't exist"
-  * AUTH_ERROR = "Please log in first"
+    2. **New Arrivals Requests (type = "new_arrivals")**:
+    - **If SUCCESS = TRUE**:
+        - List the products from items_list (up to 5 for brevity).
+        - Include product name and price for each item.
+        - Format as a bulleted list for clarity.
+        - Be enthusiastic: "Check out our latest arrivals! 🛍️"
+        - Example: "Here are our newest arrivals:\n• [Product Name 1] - $[Price 1]\n• [Product Name 2] - $[Price 2]"
+        - If more than 5 products, add: "There are more new arrivals! Want to see the full list?"
+    - **If SUCCESS = FALSE**:
+        - Inform the user no new arrivals were found.
+        - Suggest alternatives: "No new arrivals right now. Want to see men's or women's products?"
 
-Guidelines:
-- Be warm, conversational, and helpful
-- Reference previous conversation naturally when relevant
-- Use appropriate emojis to make responses engaging (but don't overdo it)
-- Format product information attractively with prices and availability
-- Explain order status clearly with next steps for customers
-- For errors, be apologetic and suggest helpful alternatives
-- Always end with an offer to help further
+    3. **Memory Requests (type = "memory_response")**:
+    - If request_type = "order_id_history":
+        - List all order IDs from memory_content as a bulleted list.
+        - Example: "You mentioned these order IDs:\n• order_ABC123\n• cod_XYZ789"
+        - If memory_content is a string, use it directly.
+    - If request_type = "previous_user_message":
+        - Return the last user message: "Your last message was: [message]"
+    - If request_type = "previous_bot_message":
+        - Return the last bot message: "I last said: [message]"
+    - If request_type = "conversation_summary":
+        - Summarize the conversation: "We've been talking about [summary]."
 
-For memory/context questions:
-- Answer directly about what was said before
-- Be specific and helpful when referencing previous messages
-- Show that you remember and understand the conversation flow
+    4. **Other Product Requests (type = "mens_products", "womens_products", "search_results")**:
+    - **If SUCCESS = TRUE**:
+        - List products from items_list (up to 5).
+        - Include name and price.
+        - Example: "Here are some [result_type]:\n• [Product Name 1] - $[Price 1]\n• [Product Name 2] - $[Price 2]"
+    - **If SUCCESS = FALSE**:
+        - Suggest alternatives: "No products found for [result_type]. Try searching for something else!"
 
-For product listings:
-- Use clean formatting with bullet points or numbers
-- Include product name, price, and stock status
-- Add direct product links when available
-- Highlight any sales or special offers with emphasis
-
-For FAILED order lookups:
-- Acknowledge the order wasn't found for their account
-- Suggest double-checking the order ID
-- Mention they might need to log into the correct account
-- Offer to help with other questions
-- DO NOT make up order status information
-
-For successful order lookups:
-- Clearly explain what each status means in customer-friendly terms
-- Provide expected timeframes when possible
-- Offer next steps or contact information if needed
-- Be reassuring and professional
-
-For errors or issues:
-- Acknowledge the problem apologetically
-- Suggest practical alternatives or solutions
-- Maintain a helpful and positive tone
-
-Response should be natural conversation, not JSON or structured data."""
+    Be conversational, positive, and helpful. Use emojis appropriately (e.g., 🛍️ for products, 🔐 for auth issues). Ensure responses are clear and concise. If items_list is provided, always include it in the response when relevant."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-Conversation History:
-{conversation_context}
+    Customer asked: {original_message}
 
-Customer originally asked: {original_message}
-Action taken: {action_taken}
-Function result: {function_result}
-SUCCESS STATUS: {was_successful} ⚠️ CRITICAL: Check this first!
+    SUCCESS STATUS: {was_successful}
 
-Generate a natural, helpful customer service response. If was_successful is False, explain the error clearly and helpfully. DO NOT make up information when the function failed.""")
+    Action Taken: {action_taken}
+
+    Result Details:
+    - Type: {result_type}
+    - Order ID (if applicable): {order_id}
+    - Total Items (if applicable): {total_items}
+    - All Items Status (if applicable): {all_status}
+    - Items List (if applicable): {items_list}
+    - Error (if applicable): {error}
+    - Memory Content (if applicable): {memory_content}
+
+    Generate a response based on the information above.""")
         ])
         
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using pure AI intelligence with memory - ENHANCED DEBUG"""
+        """Process customer message using pure AI intelligence with memory"""
         try:
             print(f"🤖 Pure AI processing: {message} (user_id: {user_id})")
             
@@ -203,7 +217,7 @@ Generate a natural, helpful customer service response. If was_successful is Fals
             confidence = intent_result.get("confidence", 0.8)
             reasoning = intent_result.get("reasoning", "")
             
-            # CRITICAL: Pass user_id to action execution
+            # Pass user_id to action execution
             if user_id:
                 parameters["user_id"] = user_id
             
@@ -212,7 +226,7 @@ Generate a natural, helpful customer service response. If was_successful is Fals
             
             print(f"🔧 Action '{action}' executed: {action_result.get('success', False)}")
             
-            # 🚨 ENHANCED DEBUG: Log order check details
+            # Log order check details
             if action == "check_order":
                 print(f"📋 ORDER CHECK DETAILS:")
                 print(f"   - Success: {action_result.get('success')}")
@@ -256,11 +270,11 @@ Generate a natural, helpful customer service response. If was_successful is Fals
             return await self._handle_error_intelligently(message, str(e))
     
     async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the determined action using Wix API - FIXED ORDER HANDLING"""
+        """Execute the determined action using Wix API"""
         try:
-            user_id = params.get("user_id")  # Extract user_id from params
+            user_id = params.get("user_id")
             
-            # NEW: Handle memory/context actions
+            # Handle memory/context actions
             if action == "remember_context":
                 return await self._handle_memory_request(params, user_id)
             
@@ -339,18 +353,16 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                 print(f"🔍 Checking order status for: {order_id} (user: {user_id})")
                 order_info = await self.wix_client.get_order_items(order_id, user_id)
                 
-                print(f"📋 Raw API Response: {order_info}")  # Debug log
+                print(f"📋 Raw API Response: {order_info}")
                 
-                # 🚨 CRITICAL FIX: Properly handle authorization failures
                 if not order_info.get("success", False):
                     error_code = order_info.get("code", "UNKNOWN_ERROR")
                     error_message = order_info.get("error", "Unknown error occurred")
                     
                     print(f"❌ Order API failed: {error_code} - {error_message}")
                     
-                    # Return the actual error instead of fake success
                     return {
-                        "success": False,  # ⚠️ CRITICAL: This must be False for auth failures!
+                        "success": False,
                         "type": "order_error",
                         "order_id": order_id,
                         "error": error_message,
@@ -359,7 +371,6 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                         "is_not_found": error_code == "NOT_FOUND"
                     }
                 
-                # Only return success if API actually succeeded
                 print(f"✅ Order API succeeded for {order_id}")
                 return {
                     "success": True,
@@ -391,8 +402,6 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                 "action": action,
                 "type": "execution_error"
             }
-    
-    # NEW: Handle memory/context requests
     async def _handle_memory_request(self, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         """Handle requests about conversation history"""
         if not user_id:
@@ -410,7 +419,7 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                 "success": True,
                 "type": "memory_response",
                 "request_type": "previous_user_message",
-                "content": last_message or "I don't see any previous messages from you in this conversation.",
+                "memory_content": last_message or "I don't see any previous messages from you in this conversation.",
                 "found": last_message is not None
             }
         
@@ -420,7 +429,7 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                 "success": True,
                 "type": "memory_response",
                 "request_type": "previous_bot_message",
-                "content": last_bot_message or "I haven't responded to anything yet in this conversation.",
+                "memory_content": last_bot_message or "I haven't responded to anything yet in this conversation.",
                 "found": last_bot_message is not None
             }
         
@@ -430,8 +439,48 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                 "success": True,
                 "type": "memory_response",
                 "request_type": "conversation_summary",
-                "history": history,
-                "message_count": len(history)
+                "memory_content": f"We've had {len(history)} messages in our conversation. You can ask about specific details, like orders or products, if you want to dive deeper!",
+                "found": bool(history)
+            }
+        
+        elif request_type == "order_id_history":
+            # Extract order IDs from conversation history
+            history = self.memory.get_conversation_history(user_id, 50)  # Increased limit to capture more messages
+            order_ids = set()
+            order_id_pattern = r'\b(order_\w+|cod_\w+)\b'  # Match order IDs like order_QgO4LkXqXu3RQs or cod_1753128467135_1soovmd4g
+            
+            for message in history:
+                if message.get("sender") == "user":
+                    matches = re.findall(order_id_pattern, message.get("content", ""))
+                    order_ids.update(matches)
+            
+            return {
+                "success": True,
+                "type": "memory_response",
+                "request_type": "order_id_history",
+                "memory_content": list(order_ids) if order_ids else "You haven't mentioned any order IDs in our conversation yet.",
+                "found": bool(order_ids)
+            }
+        
+        elif request_type == "entity_history":
+            # Handle other entity types (e.g., product queries)
+            filter_type = params.get("filter", "unknown")
+            history = self.memory.get_conversation_history(user_id, 50)
+            entities = set()
+            
+            if filter_type == "product_queries":
+                product_pattern = r'\b(search|find|show)\s+(.+?)(?:$|\s+(?:under|below|less than|more than))'
+                for message in history:
+                    if message.get("sender") == "user":
+                        matches = re.findall(product_pattern, message.get("content", ""), re.IGNORECASE)
+                        entities.update(match[1] for match in matches)
+            
+            return {
+                "success": True,
+                "type": "memory_response",
+                "request_type": "entity_history",
+                "memory_content": list(entities) if entities else f"You haven't mentioned any {filter_type.replace('_', ' ')} in our conversation yet.",
+                "found": bool(entities)
             }
         
         else:
@@ -439,187 +488,187 @@ Generate a natural, helpful customer service response. If was_successful is Fals
                 "success": True,
                 "type": "memory_response",
                 "request_type": "general",
-                "content": "I remember our conversation and I'm here to help! What would you like to know?"
+                "memory_content": "I remember our conversation and I'm here to help! What would you like to know?"
             }
     
-    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict, was_successful: bool, conversation_context: str = "") -> str:
-        """Use AI to generate natural customer service response with conversation context"""
+    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict[str, Any], was_successful: bool, conversation_context: str) -> str:
+        """Generate a natural language response based on action results"""
         try:
+            result_type = function_result.get("type", "general")
+            order_id = function_result.get("order_id", "")
+            total_items = function_result.get("totalItems", 0)
+            items_list = function_result.get("itemsSummary", [])
+            all_status = ", ".join(function_result.get("uniqueStatuses", [])) if function_result.get("uniqueStatuses") else "Unknown"
+            error = function_result.get("error", "")
+            memory_content = function_result.get("memory_content", "")
+            
+            # Format items list for orders
+            formatted_items = []
+            if result_type == "order_status":
+                for item in items_list:
+                    options = item.get("options", {})
+                    size = options.get("Size", "N/A")
+                    formatted_items.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
+            elif result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
+                # Format products for new arrivals and other product types
+                products = function_result.get("products", [])
+                formatted_items = [f"{p.get('name', 'Unknown')} - ${p.get('price', 'N/A')}" for p in products]
+            
             response = await asyncio.to_thread(
                 self.response_generator.invoke,
                 {
                     "original_message": original_message,
-                    "action_taken": action_taken,
-                    "function_result": json.dumps(function_result, indent=2),
                     "was_successful": was_successful,
-                    "conversation_context": conversation_context
+                    "action_taken": action_taken,
+                    "result_type": result_type,
+                    "order_id": order_id,
+                    "total_items": total_items,
+                    "items_list": formatted_items,
+                    "all_status": all_status,
+                    "error": error,
+                    "memory_content": memory_content
                 }
             )
             
-            return response.content if hasattr(response, 'content') else str(response)
-            
+            return response.content
+        
         except Exception as e:
-            print(f"❌ Error generating natural response: {e}")
-            # Fallback to structured response
-            return await self._create_fallback_response(function_result, was_successful)
-    
+            print(f"❌ Error generating natural response: {str(e)}")
+            return await self._create_fallback_response(
+                action=action_taken,
+                result=function_result,
+                original_message=original_message
+            )
+    def _create_response_generator(self):
+        """AI response generator optimized for multi-item orders, memory requests, and new arrivals"""
+        
+        system_prompt = """You are a customer service representative for an online clothing store.
+
+    CRITICAL: Multi-item orders and product lists are NORMAL and EXPECTED!
+
+    When handling requests, follow these guidelines based on the result type:
+
+    1. **Order Status Requests (type = "order_status")**:
+    - **Check Success First**: Look at the "was_successful" field.
+    - **If SUCCESS = TRUE**:
+        - The order WAS FOUND successfully.
+        - Multiple items in one order are normal.
+        - Each item can have different sizes, colors, and shipping statuses.
+        - Respond positively and helpfully.
+        - For Multi-Item Orders (totalItems > 1):
+        - Congratulate them: "Great news! I found your order [order_id] with [total_items] items! 🛍️"
+        - List items clearly with names, sizes, and status from items_list.
+        - Group by status if multiple statuses exist in all_status.
+        - Example: "Your order includes:\n• Item 1 (Size M) - Pending\n• Item 2 (Size L) - Shipped"
+        - For Single-Item Orders (totalItems = 1):
+        - Provide detailed info: "I found your order [order_id] with 1 item! Your '[item_name] (Size [size])' is [status]."
+    - **If SUCCESS = FALSE**:
+        - Say the order wasn't found.
+        - Handle specific errors:
+        - "MISSING_USER_ID": Prompt user to log in.
+        - "UNAUTHORIZED": Suggest checking account or order ID.
+        - "NOT_FOUND": Suggest verifying order ID.
+        - Example: "I'm sorry, I couldn't find order [order_id]. Please double-check the ID."
+
+    2. **New Arrivals Requests (type = "new_arrivals")**:
+    - **If SUCCESS = TRUE**:
+        - List the products from items_list (up to 5 for brevity).
+        - Include product name and price for each item.
+        - Format as a bulleted list for clarity.
+        - Be enthusiastic: "Check out our latest arrivals! 🛍️"
+        - Example: "Here are our newest arrivals:\n• [Product Name 1] - $[Price 1]\n• [Product Name 2] - $[Price 2]"
+        - If more than 5 products, add: "There are more new arrivals! Want to see the full list?"
+    - **If SUCCESS = FALSE**:
+        - Inform the user no new arrivals were found.
+        - Suggest alternatives: "No new arrivals right now. Want to see men's or women's products?"
+
+    3. **Memory Requests (type = "memory_response")**:
+    - If request_type = "order_id_history":
+        - List all order IDs from memory_content as a bulleted list.
+        - Example: "You mentioned these order IDs:\n• order_ABC123\n• cod_XYZ789"
+        - If memory_content is a string, use it directly.
+    - If request_type = "previous_user_message":
+        - Return the last user message: "Your last message was: [message]"
+    - If request_type = "previous_bot_message":
+        - Return the last bot message: "I last said: [message]"
+    - If request_type = "conversation_summary":
+        - Summarize the conversation: "We've been talking about [summary]."
+
+    4. **Other Product Requests (type = "mens_products", "womens_products", "search_results")**:
+    - **If SUCCESS = TRUE**:
+        - List products from items_list (up to 5).
+        - Include name and price.
+        - Example: "Here are some [result_type]:\n• [Product Name 1] - $[Price 1]\n• [Product Name 2] - $[Price 2]"
+    - **If SUCCESS = FALSE**:
+        - Suggest alternatives: "No products found for [result_type]. Try searching for something else!"
+
+    Be conversational, positive, and helpful. Use emojis appropriately (e.g., 🛍️ for products, 🔐 for auth issues). Ensure responses are clear and concise. If items_list is provided, always include it in the response when relevant."""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", """
+    Customer asked: {original_message}
+
+    SUCCESS STATUS: {was_successful}
+
+    Action Taken: {action_taken}
+
+    Result Details:
+    - Type: {result_type}
+    - Order ID (if applicable): {order_id}
+    - Total Items (if applicable): {total_items}
+    - All Items Status (if applicable): {all_status}
+    - Items List (if applicable): {items_list}
+    - Error (if applicable): {error}
+    - Memory Content (if applicable): {memory_content}
+
+    Generate a response based on the information above.""")
+        ])
+        
+        return prompt | self.llm 
     async def _generate_contextual_help(self, topic: str) -> Dict[str, Any]:
-        """Generate contextual help using AI"""
-        help_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a helpful customer service representative for an online clothing store.
-
-Generate informative, friendly responses about our store and services.
-
-Topics you can help with:
-- New arrivals and latest fashion trends
-- Store policies (shipping, returns, exchanges, sizing)
-- How to browse and find products
-- Order tracking and customer support
-- General shopping guidance and store information
-- Product categories and recommendations
-
-Be warm, professional, and informative. Use appropriate emojis and provide actionable advice."""),
-            ("human", "Customer needs help with: {topic}")
-        ])
+        """Generate help response based on topic"""
+        help_topics = {
+            "general help": "I'm here to assist with shopping, order tracking, or store policies! What do you need help with? You can ask about new arrivals, specific products, or check an order status.",
+            "returns": "Our return policy allows returns within 30 days of delivery. Items must be unworn and in original condition. Want to start a return or need more details?",
+            "shipping": "We offer standard and express shipping options. Standard shipping takes 5-7 business days. Need to check your order's shipping status or learn more?",
+            "payment": "We accept all major credit cards, PayPal, and Apple Pay. Having trouble with a payment or need help with something specific?"
+        }
         
-        try:
-            chain = help_prompt | self.llm
-            result = await asyncio.to_thread(
-                chain.invoke,
-                {"topic": topic or "general store information"}
-            )
-            
-            help_text = result.content if hasattr(result, 'content') else str(result)
-            
-            return {
-                "success": True,
-                "type": "help_response",
-                "response": help_text,
-                "topic": topic
-            }
-            
-        except Exception as e:
-            print(f"❌ Error generating contextual help: {e}")
-            return {
-                "success": True,
-                "type": "help_response",
-                "response": "👋 I'm here to help! I can show you our new arrivals, assist with order questions, provide store information, and help you find what you're looking for. What would you like to know?",
-                "topic": topic
-            }
-    
-    async def _create_fallback_response(self, result: Dict, success: bool) -> str:
-        """Create fallback response when AI generation fails - ENHANCED ERROR HANDLING"""
-        
-        # Handle memory responses specifically
-        if result.get("type") == "memory_response":
-            request_type = result.get("request_type")
-            content = result.get("content")
-            
-            if request_type == "previous_user_message":
-                if result.get("found"):
-                    return f"💭 Your previous message was: \"{content}\""
-                else:
-                    return "🤔 I don't see any previous messages from you in our current conversation."
-            
-            elif request_type == "previous_bot_message":
-                if result.get("found"):
-                    return f"💬 I just told you: \"{content}\""
-                else:
-                    return "🤔 I haven't responded to anything yet in this conversation."
-            
-            elif request_type == "conversation_summary":
-                message_count = result.get("message_count", 0)
-                return f"💭 We've exchanged {message_count} messages so far in this conversation. I remember everything we've discussed!"
-            
-            else:
-                return "💭 I remember our conversation and I'm here to help! What would you like to know?"
-        
-        # Handle failures properly - CRITICAL FIX
-        if not success:
-            error = result.get("error", "")
-            result_type = result.get("type", "")
-            error_code = result.get("error_code", "")
-            
-            if result_type == "order_error":
-                if error_code == "UNAUTHORIZED":
-                    return "🔐 I'm sorry, but I couldn't find that order for your account. This could mean:\n\n• The order ID might be incorrect\n• The order belongs to a different account\n• You might need to log in first\n\nPlease double-check your order ID and make sure you're logged into the correct account. If you need further assistance, our customer service team can help!"
-                
-                elif error_code == "NOT_FOUND":
-                    return "❌ I couldn't find an order with that ID. Please check:\n\n• Make sure the order ID is correct\n• The order might be very old or from a different store\n\nIf you're sure the order ID is correct, please contact our customer service team for assistance."
-                
-                else:
-                    return f"😔 I encountered an issue checking your order: {error}\n\nPlease try again in a moment, or contact our customer service team if the problem persists."
-            
-            elif "auth" in result_type:
-                return "🔐 Please make sure you're logged in to check your order status. Once logged in, I'll be happy to help you track your orders!"
-            
-            elif "search" in result_type:
-                return "🔍 I couldn't find products matching that search. Would you like to try different keywords or browse our new arrivals instead?"
-            
-            else:
-                return "😔 I encountered an issue processing your request. Please try again or let me know how else I can help!"
-        
-        # Handle successful responses
-        else:
-            result_type = result.get("type", "unknown")
-            
-            if result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
-                count = result.get("count", 0)
-                if count > 0:
-                    return f"🛍️ Great! I found {count} products for you. Take a look and let me know if you need anything else!"
-                else:
-                    return "😔 I couldn't find any products matching your request right now. Would you like to try a different search or see our new arrivals instead?"
-            
-            elif result_type == "order_status":
-                order_id = result.get("order_id", "")
-                total_items = result.get("totalItems", 0)
-                return f"📦 I found your order {order_id} with {total_items} item(s). Let me know if you need more details about any specific items!"
-            
-            elif result_type == "help_response":
-                return result.get("response", "I'm here to help! What can I assist you with today?")
-            
-            else:
-                return "✅ I've processed your request! How else can I help you today?"
-    
-    async def _handle_error_intelligently(self, message: str, error: str) -> Dict[str, Any]:
-        """Use AI to handle errors gracefully"""
-        error_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a customer service representative handling a technical error. Generate a helpful, apologetic response that maintains customer confidence and suggests alternatives. Be warm and professional."),
-            ("human", "Customer asked: {message}\nTechnical error occurred: {error}\nGenerate a helpful response.")
-        ])
-        
-        try:
-            chain = error_prompt | self.llm
-            result = await asyncio.to_thread(
-                chain.invoke,
-                {"message": message, "error": error}
-            )
-            
-            response_text = result.content if hasattr(result, 'content') else str(result)
-            
-        except Exception:
-            # Ultimate fallback
-            response_text = "I apologize for the technical difficulty. Our team is working to resolve this. Please try again in a moment, or contact our customer service team for immediate assistance. I'm here to help in any way I can!"
-        
+        response = help_topics.get(topic.lower(), help_topics["general help"])
         return {
-            "response": response_text,
-            "confidence": 0.3,
-            "action": "error_handling",
-            "success": False,
-            "error": error
+            "success": True,
+            "type": "help_response",
+            "content": response
         }
     
-    def is_healthy(self) -> bool:
-        """Check if the Pure AI agent is working properly"""
+    async def _handle_error_intelligently(self, message: str, error: str) -> Dict[str, Any]:
+        """Handle errors with AI-generated responses"""
+        error_prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are a customer service bot. An error occurred: {error}. Respond politely and helpfully, suggesting next steps."),
+            ("human", "Customer message: {message}")
+        ])
+        
         try:
-            # Check if all components are initialized
-            return (
-                hasattr(self, 'llm') and self.llm is not None and
-                hasattr(self, 'wix_client') and self.wix_client is not None and
-                hasattr(self, 'intent_analyzer') and self.intent_analyzer is not None and
-                hasattr(self, 'response_generator') and self.response_generator is not None and
-                hasattr(self, 'memory') and self.memory is not None
+            response = await asyncio.to_thread(
+                error_prompt | self.llm,
+                {
+                    "error": error,
+                    "message": message
+                }
             )
-        except Exception as e:
-            print(f"❌ Health check failed: {e}")
-            return False
+            return {
+                "response": response.content,
+                "confidence": 0.8,
+                "action": "error_handling",
+                "success": False,
+                "reasoning": f"Error occurred: {error}"
+            }
+        except Exception:
+            return {
+                "response": "😔 Something went wrong on my end. Please try again or contact support for assistance!",
+                "confidence": 0.5,
+                "action": "error_handling",
+                "success": False,
+                "reasoning": f"Error in error handling: {error}"
+            }
