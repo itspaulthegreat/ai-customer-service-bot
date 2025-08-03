@@ -101,74 +101,100 @@ Analyze this customer message considering the conversation context above.""")
         
         return prompt | self.llm | JsonOutputParser()
     
-   def _create_response_generator(self):
-    """AI response generator optimized for multi-item orders, memory requests, and new arrivals"""
+    def _create_response_generator(self):
+        """AI response generator optimized for multi-item orders and memory requests"""
+        
+        system_prompt = """You are a customer service representative for an online clothing store.
+
+CRITICAL: Multi-item orders are NORMAL and EXPECTED!
+
+When handling order status requests (type = "order_status"):
+
+1. **Check Success First**: Look at the "was_successful" field
     
-    system_prompt = """You are a customer service representative for an online clothing store.
+2. **If SUCCESS = TRUE**:
+- The order WAS FOUND successfully
+- Multiple items in one order is completely normal
+- Each item can have different sizes, colors, and shipping statuses
+- Respond positively and helpfully about the order
 
-CRITICAL: Multi-item orders and product lists are NORMAL and EXPECTED!
+3. **For Multi-Item Orders** (totalItems > 1):
+- Congratulate them on their order
+- Summarize: "I found your order [ID] with [X] items"
+- List items clearly with names, sizes, and status
+- Group by status when helpful (e.g., "All items are pending")
+- Be enthusiastic about their purchase
 
-When handling requests, follow these guidelines based on the result type:
+4. **For Single-Item Orders** (totalItems = 1):
+- Still provide detailed information about the item (name, options, status)
+- Be positive and helpful
 
-1. **Order Status Requests (type = "order_status")**:
-   - **Check Success First**: Look at the "was_successful" field.
-   - **If SUCCESS = TRUE**:
-     - The order WAS FOUND successfully.
-     - Multiple items in one order are normal.
-     - Each item can have different sizes, colors, and shipping statuses.
-     - Respond positively and helpfully.
-     - For Multi-Item Orders (totalItems > 1):
-       - Congratulate them: "Great news! I found your order [order_id] with [total_items] items! 🛍️"
-       - List items clearly with names, sizes, and status from items_list.
-       - Group by status if multiple statuses exist in all_status.
-       - Example: "Your order includes:\n• Item 1 (Size M) - Pending\n• Item 2 (Size L) - Shipped"
-     - For Single-Item Orders (totalItems = 1):
-       - Provide detailed info: "I found your order [order_id] with 1 item! Your '[item_name] (Size [size])' is [status]."
-   - **If SUCCESS = FALSE**:
-     - Say the order wasn't found.
-     - Handle specific errors:
-       - "MISSING_USER_ID": Prompt user to log in.
-       - "UNAUTHORIZED": Suggest checking account or order ID.
-       - "NOT_FOUND": Suggest verifying order ID.
-     - Example: "I'm sorry, I couldn't find order [order_id]. Please double-check the ID."
+5. **If SUCCESS = FALSE**:
+- Then and only then say the order wasn't found
+- Suggest checking order ID or account
+- Handle specific errors:
+  - "MISSING_USER_ID": Prompt user to log in
+  - "UNAUTHORIZED": Suggest checking account or order ID
+  - "NOT_FOUND": Suggest verifying order ID
 
-2. **New Arrivals Requests (type = "new_arrivals")**:
-   - **If SUCCESS = TRUE**:
-     - List the products from items_list (up to 5 for brevity).
-     - Include product name and price for each item.
-     - Format as a bulleted list for clarity.
-     - Be enthusiastic: "Check out our latest arrivals! 🛍️"
-     - Example: "Here are our newest arrivals:\n• [Product Name 1] - $[Price 1]\n• [Product Name 2] - $[Price 2]"
-     - If more than 5 products, add: "There are more new arrivals! Want to see the full list?"
-   - **If SUCCESS = FALSE**:
-     - Inform the user no new arrivals were found.
-     - Suggest alternatives: "No new arrivals right now. Want to see men's or women's products?"
+6. **For Memory Requests (type = "memory_response")**:
+- If request_type = "order_id_history":
+  - List all order IDs provided in the conversation from memory_content
+  - If memory_content is a string (e.g., "You haven't mentioned any order IDs"), use it directly
+  - If memory_content is a list, format as a bulleted list
+  - Example: "You mentioned these order IDs: \n• order_ABC123\n• cod_XYZ789"
+- If request_type = "previous_user_message":
+  - Return the last user message from memory_content
+  - Example: "Your last message was: [message]"
+- If request_type = "previous_bot_message":
+  - Return the last bot message from memory_content
+  - Example: "I last said: [message]"
+- If request_type = "conversation_summary":
+  - Summarize the conversation from memory_content
+  - Example: "We've been talking about your orders. You mentioned [X] messages."
+- If request_type = "entity_history":
+  - List entities (e.g., product queries) from memory_content based on the filter
+  - Example: "You asked about these products: [list]"
 
-3. **Memory Requests (type = "memory_response")**:
-   - If request_type = "order_id_history":
-     - List all order IDs from memory_content as a bulleted list.
-     - Example: "You mentioned these order IDs:\n• order_ABC123\n• cod_XYZ789"
-     - If memory_content is a string, use it directly.
-   - If request_type = "previous_user_message":
-     - Return the last user message: "Your last message was: [message]"
-   - If request_type = "previous_bot_message":
-     - Return the last bot message: "I last said: [message]"
-   - If request_type = "conversation_summary":
-     - Summarize the conversation: "We've been talking about [summary]."
+EXAMPLES OF GOOD RESPONSES:
 
-4. **Other Product Requests (type = "mens_products", "womens_products", "search_results")**:
-   - **If SUCCESS = TRUE**:
-     - List products from items_list (up to 5).
-     - Include name and price.
-     - Example: "Here are some [result_type]:\n• [Product Name 1] - $[Price 1]\n• [Product Name 2] - $[Price 2]"
-   - **If SUCCESS = FALSE**:
-     - Suggest alternatives: "No products found for [result_type]. Try searching for something else!"
+For successful multi-item order:
+"Great news! I found your order order_QgO4LkXqXu3RQs with 6 items! 🛍️
+Your order includes:
+• TSS Originals: Killin' It (Size XL) - Pending
+• Oversized men black (Size XL) - Pending  
+• Random Style (Size M) - Pending
+• Gym (Size L) - Pending
+• Polo 1 (Size XXL) - Pending
+• TSS Originals: Killin' It (Size M) - Pending
+All items are currently pending and being prepared for shipment! You'll receive tracking information once they ship. Is there anything specific about any of these items you'd like to know more about?"
 
-Be conversational, positive, and helpful. Use emojis appropriately (e.g., 🛍️ for products, 🔐 for auth issues). Ensure responses are clear and concise. If items_list is provided, always include it in the response when relevant."""
+For successful single-item order:
+"🎉 I found your order cod_1753128467135_1soovmd4g with 1 item! 
+Your 'Polo 2 (Size XL)' is currently Pending. 
+You'll receive tracking information once it's been shipped out. Is there anything else I can help you with?"
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", """
+For order ID history:
+"💭 You asked for the order IDs you've mentioned. Here they are: 
+• cod_1753128467135_1soovmd4g
+• order_QgO4LkXqXu3RQs
+Would you like me to check the status of any of these orders?"
+
+For no order IDs:
+"💭 You haven't mentioned any order IDs in our conversation yet. If you share one, I can check its status for you!"
+
+For unauthorized error:
+"🔐 I'm sorry, but I couldn't find that order for your account. This could mean:
+• The order ID might be incorrect
+• The order belongs to a different account
+• You might need to log in first
+Please double-check your order ID and make sure you're logged into the correct account."
+
+Be conversational, positive, and helpful. Use emojis appropriately to enhance tone."""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", """
 Customer asked: {original_message}
 
 SUCCESS STATUS: {was_successful}
@@ -185,9 +211,9 @@ Result Details:
 - Memory Content (if applicable): {memory_content}
 
 Generate a response based on the information above.""")
-    ])
-    
-    return prompt | self.llm
+        ])
+        
+        return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Process customer message using pure AI intelligence with memory"""
@@ -502,17 +528,12 @@ Generate a response based on the information above.""")
             error = function_result.get("error", "")
             memory_content = function_result.get("memory_content", "")
             
-            # Format items list for orders
+            # Format items list for response
             formatted_items = []
-            if result_type == "order_status":
-                for item in items_list:
-                    options = item.get("options", {})
-                    size = options.get("Size", "N/A")
-                    formatted_items.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
-            elif result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
-                # Format products for new arrivals and other product types
-                products = function_result.get("products", [])
-                formatted_items = [f"{p.get('name', 'Unknown')} - ${p.get('price', 'N/A')}" for p in products]
+            for item in items_list:
+                options = item.get("options", {})
+                size = options.get("Size", "N/A")
+                formatted_items.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
             
             response = await asyncio.to_thread(
                 self.response_generator.invoke,
@@ -538,7 +559,8 @@ Generate a response based on the information above.""")
                 action=action_taken,
                 result=function_result,
                 original_message=original_message
-            )  
+            )
+    
     async def _create_fallback_response(self, action: str, result: Dict[str, Any], original_message: str) -> str:
         """Create a fallback response when AI generation fails"""
         result_type = result.get("type", "general")
