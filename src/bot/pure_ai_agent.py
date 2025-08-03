@@ -274,65 +274,65 @@ class PureAIAgent:
         """AI that understands customer intent and extracts parameters"""
         system_prompt = """You are an AI assistant that analyzes customer messages for an online clothing store.
 
-    You have access to the conversation history to understand context and references to previous messages.
+You have access to the conversation history to understand context and references to previous messages.
 
-    Your job is to understand what the customer wants and extract relevant information intelligently.
+Your job is to understand what the customer wants and extract relevant information intelligently.
 
-    Available actions you can recommend:
-    1. "show_new_arrivals" - Customer wants to see new/latest products
-    2. "show_mens_products" - Customer specifically wants men's items
-    3. "show_womens_products" - Customer specifically wants women's items
-    4. "search_products" - Customer is looking for specific items with search terms
-    5. "check_order" - Customer wants order status/tracking information
-    6. "get_user_orders" - Customer wants to see all their orders
-    7. "general_help" - General questions, greetings, store policies, support
-    8. "remember_context" - Customer is asking about previous messages or conversation context
+Available actions you can recommend:
+1. "show_new_arrivals" - Customer wants to see new/latest products
+2. "show_mens_products" - Customer specifically wants men's items
+3. "show_womens_products" - Customer specifically wants women's items
+4. "search_products" - Customer is looking for specific items with search terms
+5. "check_order" - Customer wants order status/tracking information
+6. "get_user_orders" - Customer wants to see all their orders
+7. "general_help" - General questions, greetings, store policies, support
+8. "remember_context" - Customer is asking about previous messages or conversation context
 
-    For each message, respond with JSON only using this format:
-    {{
-        "action": "action_name",
-        "parameters": {{
-            "key": "value"
-        }},
-        "confidence": 0.95,
-        "reasoning": "Brief explanation"
-    }}
+For each message, respond with JSON only using this format:
+{
+    "action": "action_name",
+    "parameters": {
+        "key": "value"
+    },
+    "confidence": 0.95,
+    "reasoning": "Brief explanation"
+}
 
-    Context awareness examples:
-    - "What was my previous message?" → action: "remember_context", parameters: {"type": "previous_user_message"}
-    - "What did you just tell me?" → action: "remember_context", parameters: {"type": "previous_bot_message"}
-    - "What were we talking about?" → action: "remember_context", parameters: {"type": "conversation_summary"}
-    - "What order IDs did I give you?" or "List all order IDs I mentioned" → action: "remember_context", parameters: {"type": "order_id_history", "filter": "order_ids"}
-    - "What products did I ask about?" → action: "remember_context", parameters: {"type": "entity_history", "filter": "product_queries"}
-    - "Show my orders" → action: "get_user_orders", parameters: {"limit": 20}
+Context awareness examples:
+- "What was my previous message?" → action: "remember_context", parameters: {"type": "previous_user_message"}
+- "What did you just tell me?" → action: "remember_context", parameters: {"type": "previous_bot_message"}
+- "What were we talking about?" → action: "remember_context", parameters: {"type": "conversation_summary"}
+- "What order IDs did I give you?" or "List all order IDs I mentioned" → action: "remember_context", parameters: {"type": "order_id_history", "filter": "order_ids"}
+- "What products did I ask about?" → action: "remember_context", parameters: {"type": "entity_history", "filter": "product_queries"}
+- "Show my orders" → action: "get_user_orders", parameters: {"limit": 20}
 
-    Parameter extraction examples:
-    - Order queries: Extract order IDs naturally
-    * "Check my order ABC123" → order_id: "ABC123"
-    * "Status of #order_XYZ789" → order_id: "order_XYZ789"  
-    * "Where is order_QsItdDdq8jJJMT" → order_id: "order_QsItdDdq8jJJMT"
-    * "cod_1753128467135_1soovmd4g status" → order_id: "cod_1753128467135_1soovmd4g"
+Parameter extraction examples:
+- Order queries: Extract order IDs naturally
+  * "Check my order ABC123" → order_id: "ABC123"
+  * "Status of #order_XYZ789" → order_id: "order_XYZ789"  
+  * "Where is order_QsItdDdq8jJJMT" → order_id: "order_QsItdDdq8jJJMT"
+  * "cod_1753128467135_1soovmd4g status" → order_id: "cod_1753128467135_1soovmd4g"
 
-    - Product searches: Extract search terms and filters
-    * "Red Nike shoes" → query: "red Nike shoes"
-    * "Blue dresses under $50" → query: "blue dresses", price_filter: "under 50"
-    * "Men's winter jackets" → query: "winter jackets", category: "mens"
+- Product searches: Extract search terms and filters
+  * "Red Nike shoes" → query: "red Nike shoes"
+  * "Blue dresses under $50" → query: "blue dresses", price_filter: "under 50"
+  * "Men's winter jackets" → query: "winter jackets", category: "mens"
 
-    - Quantity limits: Extract from natural language
-    * "Show me 10 items" → limit: 10
-    * "First 5 products" → limit: 5
-    * Default to 8 if not specified
+- Quantity limits: Extract from natural language
+  * "Show me 10 items" → limit: 10
+  * "First 5 products" → limit: 5
+  * Default to 8 if not specified
 
-    Be intelligent about understanding context and variations in language (e.g., "order IDs I gave you" = "order IDs I mentioned"). Use conversation history to understand references."""
+Be intelligent about understanding context and variations in language (e.g., "order IDs I gave you" = "order IDs I mentioned"). Use conversation history to understand references."""
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-    Conversation History:
-    {conversation_context}
+Conversation History:
+{conversation_context}
 
-    Current Message: {message}
+Current Message: {message}
 
-    Analyze this customer message considering the conversation context above.""")
+Analyze this customer message considering the conversation context above.""")
         ])
         return prompt | self.llm | JsonOutputParser()
     
