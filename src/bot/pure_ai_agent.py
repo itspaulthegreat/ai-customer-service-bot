@@ -1,4 +1,4 @@
-# src/bot/pure_ai_agent.py - Updated with session memory
+# src/bot/pure_ai_agent.py - COMPLETE FIXED VERSION
 
 import asyncio
 import json
@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from .session_memory import session_memory
 
 class PureAIAgent:
-    """Pure AI-driven customer service agent with session memory"""
+    """Pure AI-driven customer service agent with session memory - FIXED ORDER HANDLING"""
     
     def __init__(self, groq_api_key: str, wix_client):
         self.wix_client = wix_client
@@ -32,7 +32,7 @@ class PureAIAgent:
         self.intent_analyzer = self._create_intent_analyzer()
         self.response_generator = self._create_response_generator()
         
-        print("✅ Pure AI Agent initialized with SESSION MEMORY!")
+        print("✅ Pure AI Agent initialized with SESSION MEMORY and FIXED ORDER HANDLING!")
     
     def _create_intent_analyzer(self):
         """AI that understands customer intent and extracts parameters"""
@@ -72,6 +72,7 @@ Parameter extraction examples:
   * "Check my order ABC123" → order_id: "ABC123"
   * "Status of #order_XYZ789" → order_id: "order_XYZ789"  
   * "Where is order_QsItdDdq8jJJMT" → order_id: "order_QsItdDdq8jJJMT"
+  * "cod_1753128467135_1soovmd4g status" → order_id: "cod_1753128467135_1soovmd4g"
 
 - Product searches: Extract search terms and filters
   * "Red Nike shoes" → query: "red Nike shoes"
@@ -99,13 +100,24 @@ Analyze this customer message considering the conversation context above.""")
         return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """AI that generates natural customer service responses"""
+        """AI that generates natural customer service responses - FIXED ERROR HANDLING"""
         
         system_prompt = """You are a friendly, professional customer service representative for an online clothing store.
+
+CRITICAL INSTRUCTION: Always check if the function was successful before generating your response!
 
 You have access to conversation history and should use it to provide contextual, personalized responses.
 
 Create natural, engaging responses based on the function results provided and conversation context.
+
+IMPORTANT ERROR HANDLING:
+- FIRST check the "Success" field in the function result
+- If Success is FALSE, explain the error apologetically and helpfully
+- Never claim an order exists or provide fake status when the function failed
+- For order status errors, be specific:
+  * UNAUTHORIZED = "Order not found for your account" 
+  * NOT_FOUND = "Order ID doesn't exist"
+  * AUTH_ERROR = "Please log in first"
 
 Guidelines:
 - Be warm, conversational, and helpful
@@ -127,7 +139,14 @@ For product listings:
 - Add direct product links when available
 - Highlight any sales or special offers with emphasis
 
-For order status:
+For FAILED order lookups:
+- Acknowledge the order wasn't found for their account
+- Suggest double-checking the order ID
+- Mention they might need to log into the correct account
+- Offer to help with other questions
+- DO NOT make up order status information
+
+For successful order lookups:
 - Clearly explain what each status means in customer-friendly terms
 - Provide expected timeframes when possible
 - Offer next steps or contact information if needed
@@ -149,15 +168,15 @@ Conversation History:
 Customer originally asked: {original_message}
 Action taken: {action_taken}
 Function result: {function_result}
-Success: {was_successful}
+SUCCESS STATUS: {was_successful} ⚠️ CRITICAL: Check this first!
 
-Generate a natural, helpful customer service response that considers the conversation history.""")
+Generate a natural, helpful customer service response. If was_successful is False, explain the error clearly and helpfully. DO NOT make up information when the function failed.""")
         ])
         
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using pure AI intelligence with memory"""
+        """Process customer message using pure AI intelligence with memory - ENHANCED DEBUG"""
         try:
             print(f"🤖 Pure AI processing: {message} (user_id: {user_id})")
             
@@ -193,14 +212,28 @@ Generate a natural, helpful customer service response that considers the convers
             
             print(f"🔧 Action '{action}' executed: {action_result.get('success', False)}")
             
+            # 🚨 ENHANCED DEBUG: Log order check details
+            if action == "check_order":
+                print(f"📋 ORDER CHECK DETAILS:")
+                print(f"   - Success: {action_result.get('success')}")
+                print(f"   - Error: {action_result.get('error')}")
+                print(f"   - Error Code: {action_result.get('error_code')}")
+                print(f"   - Type: {action_result.get('type')}")
+                print(f"   - Order ID: {action_result.get('order_id')}")
+            
             # Step 3: AI generates natural customer response with context
+            was_successful = action_result.get("success", True)
+            print(f"🤖 Telling AI that success = {was_successful}")
+            
             response_text = await self._generate_natural_response(
                 original_message=message,
                 action_taken=action,
                 function_result=action_result,
-                was_successful=action_result.get("success", True),
+                was_successful=was_successful,
                 conversation_context=conversation_context
             )
+            
+            print(f"💬 AI generated response (first 100 chars): {response_text[:100]}...")
             
             # Add bot response to memory
             if user_id:
@@ -223,7 +256,7 @@ Generate a natural, helpful customer service response that considers the convers
             return await self._handle_error_intelligently(message, str(e))
     
     async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the determined action using Wix API"""
+        """Execute the determined action using Wix API - FIXED ORDER HANDLING"""
         try:
             user_id = params.get("user_id")  # Extract user_id from params
             
@@ -306,12 +339,39 @@ Generate a natural, helpful customer service response that considers the convers
                 print(f"🔍 Checking order status for: {order_id} (user: {user_id})")
                 order_info = await self.wix_client.get_order_items(order_id, user_id)
                 
+                print(f"📋 Raw API Response: {order_info}")  # Debug log
+                
+                # 🚨 CRITICAL FIX: Properly handle authorization failures
+                if not order_info.get("success", False):
+                    error_code = order_info.get("code", "UNKNOWN_ERROR")
+                    error_message = order_info.get("error", "Unknown error occurred")
+                    
+                    print(f"❌ Order API failed: {error_code} - {error_message}")
+                    
+                    # Return the actual error instead of fake success
+                    return {
+                        "success": False,  # ⚠️ CRITICAL: This must be False for auth failures!
+                        "type": "order_error",
+                        "order_id": order_id,
+                        "error": error_message,
+                        "error_code": error_code,
+                        "is_unauthorized": error_code == "UNAUTHORIZED",
+                        "is_not_found": error_code == "NOT_FOUND"
+                    }
+                
+                # Only return success if API actually succeeded
+                print(f"✅ Order API succeeded for {order_id}")
                 return {
-                    "success": order_info.get("success", False),
-                    "type": "order_status",
+                    "success": True,
+                    "type": "order_status", 
                     "order_id": order_id,
                     "order_data": order_info,
-                    "error": order_info.get("error") if not order_info.get("success") else None
+                    "items": order_info.get("items", []),
+                    "totalItems": order_info.get("totalItems", 0),
+                    "itemsSummary": order_info.get("itemsSummary", []),
+                    "statusGroups": order_info.get("statusGroups", {}),
+                    "hasMultipleItems": order_info.get("hasMultipleItems", False),
+                    "uniqueStatuses": order_info.get("uniqueStatuses", [])
                 }
             
             elif action == "general_help":
@@ -448,7 +508,8 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
             }
     
     async def _create_fallback_response(self, result: Dict, success: bool) -> str:
-        """Create fallback response when AI generation fails"""
+        """Create fallback response when AI generation fails - ENHANCED ERROR HANDLING"""
+        
         # Handle memory responses specifically
         if result.get("type") == "memory_response":
             request_type = result.get("request_type")
@@ -473,8 +534,33 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
             else:
                 return "💭 I remember our conversation and I'm here to help! What would you like to know?"
         
-        # Handle other response types
-        if success:
+        # Handle failures properly - CRITICAL FIX
+        if not success:
+            error = result.get("error", "")
+            result_type = result.get("type", "")
+            error_code = result.get("error_code", "")
+            
+            if result_type == "order_error":
+                if error_code == "UNAUTHORIZED":
+                    return "🔐 I'm sorry, but I couldn't find that order for your account. This could mean:\n\n• The order ID might be incorrect\n• The order belongs to a different account\n• You might need to log in first\n\nPlease double-check your order ID and make sure you're logged into the correct account. If you need further assistance, our customer service team can help!"
+                
+                elif error_code == "NOT_FOUND":
+                    return "❌ I couldn't find an order with that ID. Please check:\n\n• Make sure the order ID is correct\n• The order might be very old or from a different store\n\nIf you're sure the order ID is correct, please contact our customer service team for assistance."
+                
+                else:
+                    return f"😔 I encountered an issue checking your order: {error}\n\nPlease try again in a moment, or contact our customer service team if the problem persists."
+            
+            elif "auth" in result_type:
+                return "🔐 Please make sure you're logged in to check your order status. Once logged in, I'll be happy to help you track your orders!"
+            
+            elif "search" in result_type:
+                return "🔍 I couldn't find products matching that search. Would you like to try different keywords or browse our new arrivals instead?"
+            
+            else:
+                return "😔 I encountered an issue processing your request. Please try again or let me know how else I can help!"
+        
+        # Handle successful responses
+        else:
             result_type = result.get("type", "unknown")
             
             if result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
@@ -486,26 +572,14 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
             
             elif result_type == "order_status":
                 order_id = result.get("order_id", "")
-                return f"📦 I found information about your order {order_id}. Let me know if you need more details or have other questions!"
+                total_items = result.get("totalItems", 0)
+                return f"📦 I found your order {order_id} with {total_items} item(s). Let me know if you need more details about any specific items!"
             
             elif result_type == "help_response":
                 return result.get("response", "I'm here to help! What can I assist you with today?")
             
             else:
                 return "✅ I've processed your request! How else can I help you today?"
-        
-        else:
-            error = result.get("error", "")
-            result_type = result.get("type", "")
-            
-            if "order" in result_type or "order" in error.lower():
-                return "❌ I couldn't find that order. Please double-check your order ID and make sure you're logged in, or contact our customer service team for assistance."
-            elif "auth" in result_type:
-                return "🔐 Please make sure you're logged in to check your order status. Once logged in, I'll be happy to help you track your orders!"
-            elif "search" in result_type:
-                return "🔍 I couldn't find products matching that search. Would you like to try different keywords or browse our new arrivals instead?"
-            else:
-                return "😔 I encountered an issue processing your request. Please try again or let me know how else I can help!"
     
     async def _handle_error_intelligently(self, message: str, error: str) -> Dict[str, Any]:
         """Use AI to handle errors gracefully"""
