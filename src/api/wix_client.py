@@ -4,22 +4,25 @@ from typing import Dict, List, Any, Optional
 import json
 
 class WixAPIClient:
+    """Client for interacting with Wix API endpoints"""
+    
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip('/')
         self.timeout = aiohttp.ClientTimeout(total=30)
         
-        # Updated endpoints
+        # Available endpoints
         self.endpoints = {
             "new_arrivals": f"{self.base_url}/_functions/getNewArrivals",
             "mens_products": f"{self.base_url}/_functions/getMensProducts", 
             "womens_products": f"{self.base_url}/_functions/getWomensProducts",
             "search_products": f"{self.base_url}/_functions/searchProducts",
             "get_product": f"{self.base_url}/_functions/getProduct",
+            # New order endpoints
             "order_items": f"{self.base_url}/_functions/getOrderItems",
             "order_item_status": f"{self.base_url}/_functions/getOrderItemStatus",
             "order_summary": f"{self.base_url}/_functions/getOrderSummary",
             "user_orders": f"{self.base_url}/_functions/getUserOrders",
-            "order_status": f"{self.base_url}/_functions/getOrderStatus"
+            "order_status": f"{self.base_url}/_functions/getOrderStatus"  # Legacy
         }
         
         print(f"🔗 WixAPIClient initialized with base URL: {self.base_url}")
@@ -153,22 +156,15 @@ class WixAPIClient:
 
     # ============== NEW ORDER STATUS METHODS ==============
 
-    async def get_order_items(self, order_id: str, user_id: str = None, user_email: str = None) -> Dict[str, Any]:
-        """Get all items in an order with user context"""
+    async def get_order_items(self, order_id: str) -> Dict[str, Any]:
+        """Get all items in an order - Bot accessible"""
         try:
-            print(f"📋 Fetching order items for order: {order_id}, user: {user_id}")
+            print(f"📋 Fetching order items for order: {order_id}")
             
             headers = {
                 'User-Agent': 'ai-customer-service-bot/2.0',
-                'X-Bot-Request': 'true',
-                'Content-Type': 'application/json'
+                'X-Bot-Request': 'true'
             }
-            
-            # 🔥 KEY IMPROVEMENT: Pass user context in headers
-            if user_id:
-                headers['X-User-Id'] = user_id
-            if user_email:
-                headers['X-User-Email'] = user_email
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
