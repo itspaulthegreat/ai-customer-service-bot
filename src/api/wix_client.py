@@ -201,6 +201,22 @@ class WixAPIClient:
                             "hasMultipleItems": data.get("hasMultipleItems", False),
                             "uniqueStatuses": data.get("uniqueStatuses", [])
                         }
+                    elif response.status == 400:
+                        error_data = await response.json() if response.content_type == 'application/json' else {}
+                        print(f"❌ Order items API returned bad request: {response.status}")
+                        return {
+                            "success": False,
+                            "error": error_data.get("error", "Invalid request"),
+                            "code": error_data.get("code", "BAD_REQUEST")
+                        }
+                    elif response.status == 404:
+                        error_data = await response.json() if response.content_type == 'application/json' else {}
+                        print(f"❌ Order items API returned not found: {response.status}")
+                        return {
+                            "success": False,
+                            "error": error_data.get("error", "Order not found"),
+                            "code": error_data.get("code", "NOT_FOUND")
+                        }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Order items API returned status {response.status}")
@@ -217,7 +233,6 @@ class WixAPIClient:
                 "error": str(e),
                 "code": "NETWORK_ERROR"
             }
-
     async def get_order_item_status(self, order_id: str, catalog_item_id: str, user_id: str = None) -> Dict[str, Any]:
         """Get specific order item status"""
         try:
