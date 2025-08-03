@@ -39,16 +39,16 @@ Available tool categories:
 - "order": Order status, tracking, order history, returns
 - "general": Store policies, help, greetings, complaints, general questions
 
-Output JSON with:
-{
+Output JSON with this exact format:
+{{
     "primary_intent": "category_name",
     "confidence": 0.95,
     "context_clues": ["what indicates this intent"],
-    "follow_up": true/false,
-    "references_previous": true/false,
-    "emotional_tone": "positive/neutral/negative/frustrated",
-    "urgency_level": "low/medium/high"
-}
+    "follow_up": true,
+    "references_previous": false,
+    "emotional_tone": "positive",
+    "urgency_level": "low"
+}}
 
 Examples:
 - "What about returns?" (after talking about orders) → order intent, follow_up: true
@@ -94,14 +94,14 @@ General Tools:
 - provide_help: General assistance and guidance
 - handle_greeting: Welcome messages and greetings
 
-Output JSON:
-{
-    "tool_category": "product/order/general",
+Output JSON with this exact format:
+{{
+    "tool_category": "product",
     "tool_method": "specific_method_name", 
-    "parameters": {"key": "value"},
+    "parameters": {{"key": "value"}},
     "reasoning": "why this tool",
     "expected_outcome": "what this should accomplish"
-}"""
+}}"""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -192,17 +192,17 @@ Extract key information that should be remembered:
 - Emotional state and satisfaction level
 - Unresolved issues or follow-ups needed
 
-Output JSON:
-{
-    "context_updates": {
-        "customer_preferences": {},
+Output JSON with this exact format:
+{{
+    "context_updates": {{
+        "customer_preferences": {{}},
         "order_references": [],
         "unresolved_issues": [],
         "emotional_state": "current_mood",
-        "needs_follow_up": true/false
-    },
+        "needs_follow_up": false
+    }},
     "conversation_summary": "brief summary of interaction"
-}"""
+}}"""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -232,6 +232,8 @@ Extract important context to remember.""")
                 }
             )
             
+            print(f"🧠 Intent Analysis: {intent_analysis}")
+            
             # Step 2: Route to appropriate tool
             tool_routing = await asyncio.to_thread(
                 self.tool_router.invoke,
@@ -243,8 +245,12 @@ Extract important context to remember.""")
                 }
             )
             
+            print(f"🔀 Tool Routing: {tool_routing}")
+            
             # Step 3: Execute tool
             tool_results = await self._execute_tool(tool_routing, user_id)
+            
+            print(f"🔧 Tool Results: {tool_results.get('success', False)}")
             
             # Step 4: Generate natural response
             response_text = await self._generate_natural_response(
@@ -286,7 +292,9 @@ Extract important context to remember.""")
             
         except Exception as e:
             print(f"❌ Error in conversation processing: {e}")
-            raise
+            import traceback
+            traceback.print_exc()
+            return await self.handle_error_gracefully(str(e), message, session_id)
     
     async def _execute_tool(self, tool_routing: Dict, user_id: Optional[str]) -> Dict[str, Any]:
         """Execute the routed tool"""
@@ -314,6 +322,8 @@ Extract important context to remember.""")
                 
         except Exception as e:
             print(f"❌ Error executing tool: {e}")
+            import traceback
+            traceback.print_exc()
             return {"error": str(e), "success": False}
     
     async def _generate_natural_response(self, current_message: str, conversation_context: str, 
