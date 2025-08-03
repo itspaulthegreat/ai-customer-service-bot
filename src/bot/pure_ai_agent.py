@@ -18,7 +18,7 @@ class PureAIAgent:
         # Initialize LLM
         try:
             self.llm = ChatGroq(
-                model_name="llama-3.3-70b-versatile",
+                model_name="gemma2-9b-it",
                 temperature=0.1,
                 max_tokens=1200,
                 groq_api_key=groq_api_key
