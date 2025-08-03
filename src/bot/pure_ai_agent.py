@@ -428,7 +428,6 @@ Generate a response based on the information above.""")
                 "action": action,
                 "type": "execution_error"
             }
-    
     async def _handle_memory_request(self, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         """Handle requests about conversation history"""
         if not user_id:
