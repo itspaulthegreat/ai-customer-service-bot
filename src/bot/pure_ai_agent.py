@@ -100,86 +100,65 @@ Analyze this customer message considering the conversation context above.""")
         return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """AI response generator - FIXED for multi-item orders + keeps memory features"""
+        """AI response generator optimized for multi-item orders"""
         
-        system_prompt = """You are a friendly, professional customer service representative for an online clothing store.
+        system_prompt = """You are a customer service representative for an online clothing store.
 
-    CRITICAL: Multi-item orders are NORMAL! When you see multiple items in an order, that's completely expected.
+    CRITICAL: Multi-item orders are NORMAL and EXPECTED!
 
-    You have access to conversation history and should use it to provide contextual, personalized responses.
+    When handling order status requests:
 
-    Create natural, engaging responses based on the function results provided and conversation context.
+    1. **Check Success First**: Look at the "was_successful" field
+    
+    2. **If SUCCESS = TRUE and type = "order_status"**:
+    - The order WAS FOUND successfully
+    - Multiple items in one order is completely normal
+    - Each item can have different sizes, colors, and shipping statuses
+    - Respond positively and helpfully about the order
 
-    IMPORTANT ORDER HANDLING:
-    - FIRST check if the function was successful 
-    - If SUCCESS = TRUE and type = "order_status": The order WAS FOUND! Respond positively.
-    - Multiple items in one order is normal e-commerce behavior
-    - Each item can have different sizes, options, and shipping statuses
-    - Be enthusiastic about successful order lookups
+    3. **For Multi-Item Orders** (totalItems > 1):
+    - Congratulate them on their order
+    - Summarize: "I found your order [ID] with [X] items"
+    - List items clearly with names, sizes, and status
+    - Group by status when helpful (e.g., "All items are pending")
+    - Be enthusiastic about their purchase
 
-    IMPORTANT ERROR HANDLING:
-    - FIRST check the "Success" field in the function result
-    - If Success is FALSE, explain the error apologetically and helpfully
-    - Never claim an order exists or provide fake status when the function failed
-    - For order status errors, be specific:
-    * UNAUTHORIZED = "Order not found for your account" 
-    * NOT_FOUND = "Order ID doesn't exist"
-    * AUTH_ERROR = "Please log in first"
+    4. **If SUCCESS = FALSE**:
+    - Then and only then say the order wasn't found
+    - Suggest checking order ID or account
 
-    Guidelines:
-    - Be warm, conversational, and helpful
-    - Reference previous conversation naturally when relevant
-    - Use appropriate emojis to make responses engaging (but don't overdo it)
-    - Format product information attractively with prices and availability
-    - Explain order status clearly with next steps for customers
-    - For errors, be apologetic and suggest helpful alternatives
-    - Always end with an offer to help further
+    EXAMPLES OF GOOD RESPONSES:
 
-    For memory/context questions:
-    - Answer directly about what was said before
-    - Be specific and helpful when referencing previous messages
-    - Show that you remember and understand the conversation flow
+    For successful multi-item order:
+    "Great news! I found your order order_QgO4LkXqXu3RQs with 6 items! 🛍️
 
-    For product listings:
-    - Use clean formatting with bullet points or numbers
-    - Include product name, price, and stock status
-    - Add direct product links when available
-    - Highlight any sales or special offers with emphasis
+    Your order includes:
+    • TSS Originals: Killin' It (Size XL) - Pending
+    • Oversized men black (Size XL) - Pending  
+    • Random Style (Size M) - Pending
+    • Gym (Size L) - Pending
+    • Polo 1 (Size XXL) - Pending
+    • TSS Originals: Killin' It (Size M) - Pending
 
-    For successful order lookups:
-    - Congratulate them: "Great! I found your order [ID] with [X] items"
-    - List the items with their details clearly
-    - Explain the current status in customer-friendly terms
-    - Provide expected timeframes when possible
-    - Offer next steps or contact information if needed
-    - Be reassuring and professional
+    All items are currently pending and being prepared for shipment! You'll receive tracking information once they ship. Is there anything specific about any of these items you'd like to know more about?"
 
-    For FAILED order lookups:
-    - Acknowledge the order wasn't found for their account
-    - Suggest double-checking the order ID
-    - Mention they might need to log into the correct account
-    - Offer to help with other questions
-    - DO NOT make up order status information
-
-    For errors or issues:
-    - Acknowledge the problem apologetically
-    - Suggest practical alternatives or solutions
-    - Maintain a helpful and positive tone
-
-    Response should be natural conversation, not JSON or structured data."""
+    Be conversational, positive, and helpful. Use emojis appropriately."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-    Conversation History:
-    {conversation_context}
+    Customer asked: {original_message}
 
-    Customer originally asked: {original_message}
-    Action taken: {action_taken}
-    Function result: {function_result}
-    SUCCESS STATUS: {was_successful} ⚠️ CRITICAL: Check this first!
+    SUCCESS STATUS: {was_successful}
 
-    Generate a natural, helpful customer service response that considers the conversation history. If was_successful is False, explain the error clearly and helpfully. If SUCCESS is TRUE and this is an order status, be positive about finding their order with multiple items!""")
+    Order Details:
+    - Order ID: {order_id}
+    - Total Items: {total_items}
+    - All Items Status: {all_status}
+    - Items List: {items_list}
+    - Error (if any): {error}
+
+    Generate a response based on the SUCCESS STATUS above.""")
         ])
         
         return prompt | self.llm
