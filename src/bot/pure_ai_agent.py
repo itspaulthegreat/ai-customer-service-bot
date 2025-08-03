@@ -1,7 +1,4 @@
-"""
-Pure AI Agent - No Pattern Matching, No Regex
-This agent uses LLM for all decision making
-"""
+# src/bot/pure_ai_agent.py - Updated to pass user_id correctly
 
 import asyncio
 import json
@@ -135,7 +132,7 @@ Generate a natural, helpful customer service response.""")
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Process customer message using pure AI intelligence"""
         try:
-            print(f"🤖 Pure AI processing: {message}")
+            print(f"🤖 Pure AI processing: {message} (user_id: {user_id})")
             
             # Step 1: AI analyzes intent and extracts parameters (no regex!)
             intent_result = await asyncio.to_thread(
@@ -149,6 +146,10 @@ Generate a natural, helpful customer service response.""")
             parameters = intent_result.get("parameters", {})
             confidence = intent_result.get("confidence", 0.8)
             reasoning = intent_result.get("reasoning", "")
+            
+            # CRITICAL: Pass user_id to action execution
+            if user_id:
+                parameters["user_id"] = user_id
             
             # Step 2: Execute the appropriate action
             action_result = await self._execute_action(action, parameters)
@@ -182,6 +183,8 @@ Generate a natural, helpful customer service response.""")
     async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the determined action using Wix API"""
         try:
+            user_id = params.get("user_id")  # Extract user_id from params
+            
             if action == "show_new_arrivals":
                 limit = params.get("limit", 8)
                 products = await self.wix_client.get_new_arrivals(limit)
@@ -246,8 +249,17 @@ Generate a natural, helpful customer service response.""")
                         "help_message": "Please provide your order ID to check status"
                     }
                 
-                print(f"🔍 Checking order status for: {order_id}")
-                order_info = await self.wix_client.get_order_items(order_id)
+                if not user_id:
+                    return {
+                        "success": False,
+                        "error": "User authentication required to check order status",
+                        "type": "auth_error",
+                        "help_message": "Please make sure you're logged in to check your order status"
+                    }
+                
+                print(f"🔍 Checking order status for: {order_id} (user: {user_id})")
+                # CRITICAL: Pass user_id to the order API
+                order_info = await self.wix_client.get_order_items(order_id, user_id)
                 
                 return {
                     "success": order_info.get("success", False),
@@ -366,7 +378,9 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
             result_type = result.get("type", "")
             
             if "order" in result_type or "order" in error.lower():
-                return "❌ I couldn't find that order. Please double-check your order ID and try again, or contact our customer service team for assistance."
+                return "❌ I couldn't find that order. Please double-check your order ID and make sure you're logged in, or contact our customer service team for assistance."
+            elif "auth" in result_type:
+                return "🔐 Please make sure you're logged in to check your order status. Once logged in, I'll be happy to help you track your orders!"
             elif "search" in result_type:
                 return "🔍 I couldn't find products matching that search. Would you like to try different keywords or browse our new arrivals instead?"
             else:
@@ -413,64 +427,3 @@ Be warm, professional, and informative. Use appropriate emojis and provide actio
         except Exception as e:
             print(f"❌ Health check failed: {e}")
             return False
-    
-    async def test_ai_capabilities(self) -> Dict[str, Any]:
-        """Test various AI capabilities"""
-        test_cases = [
-            {
-                "message": "Show me what's new",
-                "expected_action": "show_new_arrivals"
-            },
-            {
-                "message": "Check order ABC123",
-                "expected_action": "check_order"
-            },
-            {
-                "message": "Looking for red shoes",
-                "expected_action": "search_products"
-            },
-            {
-                "message": "I need help with returns",
-                "expected_action": "general_help"
-            }
-        ]
-        
-        results = []
-        
-        for test in test_cases:
-            try:
-                # Test intent analysis
-                intent_result = await asyncio.to_thread(
-                    self.intent_analyzer.invoke,
-                    {"message": test["message"]}
-                )
-                
-                results.append({
-                    "message": test["message"],
-                    "expected": test["expected_action"],
-                    "detected": intent_result.get("action"),
-                    "confidence": intent_result.get("confidence", 0),
-                    "correct": intent_result.get("action") == test["expected_action"],
-                    "parameters": intent_result.get("parameters", {}),
-                    "reasoning": intent_result.get("reasoning", "")
-                })
-                
-            except Exception as e:
-                results.append({
-                    "message": test["message"],
-                    "expected": test["expected_action"],
-                    "error": str(e),
-                    "correct": False
-                })
-        
-        # Calculate overall accuracy
-        correct_count = sum(1 for r in results if r.get("correct", False))
-        accuracy = correct_count / len(results) if results else 0
-        
-        return {
-            "test_results": results,
-            "accuracy": accuracy,
-            "total_tests": len(results),
-            "correct_predictions": correct_count,
-            "agent_healthy": self.is_healthy()
-        }

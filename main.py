@@ -164,47 +164,43 @@ def legacy_process_message(message: str) -> str:
 # API ENDPOINTS - SIMPLIFIED FOR PURE AI
 # ============================================================================
 
+# Update your chat endpoint in main.py
+
+# Fix your chat endpoint in main.py - remove the userEmail reference
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(message: ChatMessage):
-    """Pure AI chat endpoint - no pattern matching!"""
     try:
         print(f"\n💬 Received message: {message.message}")
+        print(f"👤 User ID: {message.user_id}")
+        # ❌ REMOVED: print(f"📧 User Email: {message.userEmail}")  # This attribute doesn't exist
         
         if use_ai_system:
-            # Use Pure AI system - LLM handles everything!
-            print("🤖 Using Pure AI Agent (no regex/patterns)")
-            result = await agent.process_message(message.message, message.user_id)
-            
-            response_text = result.get("response", "I'm sorry, I couldn't process your request.")
-            confidence = result.get("confidence", 0.8)
-            
-            print(f"🤖 AI Agent response: {response_text[:100]}...")
+            # 🆕 CRITICAL: Pass user_id to the agent for order-related queries
+            # The agent will use this to authenticate with Wix backend
+            result = await agent.process_message(
+                message.message, 
+                user_id=message.user_id  # This gets passed to order functions
+            )
             
             return ChatResponse(
-                response=response_text,
-                confidence=confidence
+                response=result["response"],
+                confidence=result["confidence"]
             )
         else:
-            # Legacy fallback system
-            print("📦 Using legacy fallback system")
+            # Fallback to legacy system
             response_text = legacy_process_message(message.message)
-            
-            print(f"🤖 Legacy response: {response_text[:100]}...")
-            
-            return ChatResponse(
-                response=response_text,
-                confidence=0.7
-            )
+            return ChatResponse(response=response_text, confidence=0.9)
     
     except Exception as e:
-        print(f"❌ Error in chat endpoint: {e}")
+        print(f"❌ Error in chat: {e}")
         import traceback
         traceback.print_exc()
+        
         return ChatResponse(
-            response="I apologize for the technical difficulty. Please try again in a moment or contact our customer service team.",
+            response="I apologize for the technical difficulty. Please try again or contact our customer service team.",
             confidence=0.1
         )
-
 @app.get("/")
 async def root():
     system_status = "pure_ai" if use_ai_system else "legacy_fallback"

@@ -17,15 +17,30 @@ class WixAPIClient:
             "womens_products": f"{self.base_url}/_functions/getWomensProducts",
             "search_products": f"{self.base_url}/_functions/searchProducts",
             "get_product": f"{self.base_url}/_functions/getProduct",
-            # New order endpoints
+            # Order endpoints
             "order_items": f"{self.base_url}/_functions/getOrderItems",
             "order_item_status": f"{self.base_url}/_functions/getOrderItemStatus",
             "order_summary": f"{self.base_url}/_functions/getOrderSummary",
             "user_orders": f"{self.base_url}/_functions/getUserOrders",
-            "order_status": f"{self.base_url}/_functions/getOrderStatus"  # Legacy
+            "order_status": f"{self.base_url}/_functions/getOrderStatus"
         }
         
         print(f"🔗 WixAPIClient initialized with base URL: {self.base_url}")
+    
+    def _get_bot_headers(self, user_id: str = None) -> Dict[str, str]:
+        """Get headers for bot requests"""
+        headers = {
+            'User-Agent': 'ai-customer-service-bot/2.0',
+            'X-Bot-Request': 'true',
+            'Content-Type': 'application/json'
+        }
+        
+        # CRITICAL: Always include user ID in headers when available
+        if user_id:
+            headers['X-User-Id'] = user_id
+            print(f"🔑 Added user ID to headers: {user_id}")
+        
+        return headers
     
     async def get_new_arrivals(self, limit: int = 8) -> List[Dict[str, Any]]:
         """Fetch new arrivals from Wix"""
@@ -40,7 +55,6 @@ class WixAPIClient:
                     
                     if response.status == 200:
                         data = await response.json()
-                        # Handle both list and dict responses
                         products = data if isinstance(data, list) else data.get('products', [])
                         print(f"✅ Retrieved {len(products)} new arrivals")
                         return products
@@ -50,9 +64,6 @@ class WixAPIClient:
                         print(f"Response: {text}")
                         return []
                         
-        except asyncio.TimeoutError:
-            print("❌ Timeout while fetching new arrivals")
-            return []
         except Exception as e:
             print(f"❌ Error fetching new arrivals: {e}")
             return []
@@ -154,17 +165,21 @@ class WixAPIClient:
             print(f"❌ Error fetching product: {e}")
             return None
 
-    # ============== NEW ORDER STATUS METHODS ==============
+    # ============== ORDER STATUS METHODS ==============
 
-    async def get_order_items(self, order_id: str) -> Dict[str, Any]:
-        """Get all items in an order - Bot accessible"""
+    async def get_order_items(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
+        """Get all items in an order - SIMPLIFIED to use frontend user ID"""
         try:
-            print(f"📋 Fetching order items for order: {order_id}")
+            print(f"📋 Fetching order items for order: {order_id}, user: {user_id}")
             
-            headers = {
-                'User-Agent': 'ai-customer-service-bot/2.0',
-                'X-Bot-Request': 'true'
-            }
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "User ID is required for order access",
+                    "code": "MISSING_USER_ID"
+                }
+            
+            headers = self._get_bot_headers(user_id)
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -180,7 +195,11 @@ class WixAPIClient:
                             "success": True,
                             "orderId": data.get("orderId"),
                             "items": data.get("items", []),
-                            "totalItems": data.get("totalItems", 0)
+                            "totalItems": data.get("totalItems", 0),
+                            "itemsSummary": data.get("itemsSummary", []),
+                            "statusGroups": data.get("statusGroups", {}),
+                            "hasMultipleItems": data.get("hasMultipleItems", False),
+                            "uniqueStatuses": data.get("uniqueStatuses", [])
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
@@ -199,15 +218,19 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
-    async def get_order_item_status(self, order_id: str, catalog_item_id: str) -> Dict[str, Any]:
-        """Get specific order item status - Bot accessible"""
+    async def get_order_item_status(self, order_id: str, catalog_item_id: str, user_id: str = None) -> Dict[str, Any]:
+        """Get specific order item status"""
         try:
-            print(f"📦 Fetching order item status for order: {order_id}, item: {catalog_item_id}")
+            print(f"📦 Fetching order item status for order: {order_id}, item: {catalog_item_id}, user: {user_id}")
             
-            headers = {
-                'User-Agent': 'ai-customer-service-bot/2.0',
-                'X-Bot-Request': 'true'
-            }
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "User ID is required for order access",
+                    "code": "MISSING_USER_ID"
+                }
+            
+            headers = self._get_bot_headers(user_id)
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -223,7 +246,8 @@ class WixAPIClient:
                             "success": True,
                             "orderId": data.get("orderId"),
                             "item": data.get("item"),
-                            "shipmentStatus": data.get("shipmentStatus")
+                            "shipmentStatus": data.get("shipmentStatus"),
+                            "itemDetails": data.get("itemDetails", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
@@ -242,15 +266,19 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR"
             }
 
-    async def get_order_summary(self, order_id: str) -> Dict[str, Any]:
-        """Get order summary - Bot accessible with limited fields"""
+    async def get_order_summary(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
+        """Get order summary"""
         try:
-            print(f"📊 Fetching order summary for order: {order_id}")
+            print(f"📊 Fetching order summary for order: {order_id}, user: {user_id}")
             
-            headers = {
-                'User-Agent': 'ai-customer-service-bot/2.0',
-                'X-Bot-Request': 'true'
-            }
+            if not user_id:
+                return {
+                    "success": False,
+                    "error": "User ID is required for order access",
+                    "code": "MISSING_USER_ID"
+                }
+            
+            headers = self._get_bot_headers(user_id)
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
@@ -318,7 +346,6 @@ class WixAPIClient:
         try:
             print("🔧 Testing Wix API connection...")
             
-            # Test with a simple request to new arrivals
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.get(
                     self.endpoints["new_arrivals"],
