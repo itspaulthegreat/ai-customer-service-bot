@@ -1,4 +1,4 @@
-name: Enforce Jira Issue Key
+name: Enforce Jira Issue Key (AA)
 
 on:
   pull_request:
@@ -10,14 +10,19 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Important for accessing commit history
 
       - name: Validate PR branch name
         run: |
           echo "🔍 Checking branch name: ${{ github.head_ref }}"
-          if ! [[ "${{ github.head_ref }}" =~ [A-Z]+-[0-9]+ ]]; then
-            echo "❌ Branch name must include a Jira issue key (e.g., PROJ-123)"
+          if ! [[ "${{ github.head_ref }}" =~ ^AA-[0-9]+ ]]; then
+            echo "❌ Branch name must start with a Jira issue key from project 'AA' (e.g., AA-123)"
             exit 1
           fi
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
 
       - name: Get commit messages
         id: commits
@@ -29,10 +34,10 @@ jobs:
 
       - name: Validate commit messages
         run: |
-          echo "🔍 Checking commit messages"
+          echo "🔍 Validating commit messages contain AA-<number> keys"
           while read -r msg; do
-            if ! [[ "$msg" =~ [A-Z]+-[0-9]+ ]]; then
-              echo "❌ Commit message missing Jira issue key: '$msg'"
+            if ! [[ "$msg" =~ AA-[0-9]+ ]]; then
+              echo "❌ Commit message missing Jira key from 'AA': '$msg'"
               exit 1
             fi
           done <<< "${{ steps.commits.outputs.commits }}"
