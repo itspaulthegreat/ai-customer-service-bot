@@ -36,6 +36,12 @@ jobs:
         run: |
           echo "🔍 Validating commit messages contain AA-<number> keys"
           while read -r msg; do
+            # Skip merge commits
+            if [[ "$msg" =~ ^Merge ]]; then
+              echo "ℹ️ Skipping merge commit: '$msg'"
+              continue
+            fi
+
             if ! [[ "$msg" =~ AA-[0-9]+ ]]; then
               echo "❌ Commit message missing Jira key from 'AA': '$msg'"
               exit 1
