@@ -307,60 +307,59 @@ Generate a response based on the information above.""")
                 return await self._handle_memory_request(params, user_id)
             
             # Product actions (unchanged)
-            # For show_new_arrivals
             elif action == "show_new_arrivals":
                 limit = params.get("limit", 8)
-                result = await self.wix_client.get_new_arrivals(limit)
+                products = await self.wix_client.get_new_arrivals(limit)
                 return {
-                    "success": result.get("success", False),
+                    "success": True,
                     "type": "new_arrivals",
-                    "products": result.get("metric_value", []),  # Extract metric_value
-                    "count": len(result.get("metric_value", [])),
+                    "products": products,
+                    "count": len(products),
                     "limit_requested": limit
                 }
-
-            # For show_mens_products
+            
             elif action == "show_mens_products":
                 limit = params.get("limit", 8)
-                result = await self.wix_client.get_mens_products(limit)
+                products = await self.wix_client.get_mens_products(limit)
                 return {
-                    "success": result.get("success", False),
+                    "success": True,
                     "type": "mens_products",
-                    "products": result.get("metric_value", []),  # Extract metric_value
-                    "count": len(result.get("metric_value", [])),
+                    "products": products,
+                    "count": len(products),
                     "category": "men's"
                 }
-
-            # For show_womens_products
+            
             elif action == "show_womens_products":
                 limit = params.get("limit", 8)
-                result = await self.wix_client.get_womens_products(limit)
+                products = await self.wix_client.get_womens_products(limit)
                 return {
-                    "success": result.get("success", False),
+                    "success": True,
                     "type": "womens_products",
-                    "products": result.get("metric_value", []),  # Extract metric_value
-                    "count": len(result.get("metric_value", [])),
+                    "products": products,
+                    "count": len(products),
                     "category": "women's"
                 }
-
-            # For search_products
+            
             elif action == "search_products":
                 query = params.get("query", "")
                 limit = params.get("limit", 8)
+                
                 if not query:
                     return {
                         "success": False,
                         "error": "No search query provided",
                         "type": "search_error"
                     }
-                result = await self.wix_client.search_products(query, limit)
+                
+                products = await self.wix_client.search_products(query, limit)
                 return {
-                    "success": result.get("success", False),
+                    "success": True,
                     "type": "search_results",
-                    "products": result.get("metric_value", []),  # Extract metric_value
-                    "count": len(result.get("metric_value", [])),
+                    "products": products,
+                    "count": len(products),
                     "search_query": query
                 }
+            
             # Single order check (existing)
             elif action == "check_order":
                 order_id = params.get("order_id", "")
@@ -452,17 +451,19 @@ Generate a response based on the information above.""")
                 }
             
             # NEW: Get last N orders
-            # For get_last_orders
             elif action == "get_last_orders":
                 count = params.get("count", 1)
+                
                 if not user_id:
                     return {
                         "success": False,
                         "error": "User authentication required",
                         "type": "auth_error"
                     }
+                
                 print(f"🔍 Getting last {count} orders (user: {user_id})")
                 result = await self.wix_client.get_last_orders(user_id, count)
+                
                 if not result.get("success", False):
                     return {
                         "success": False,
@@ -470,13 +471,14 @@ Generate a response based on the information above.""")
                         "error": result.get("error", "Failed to get last orders"),
                         "count": count
                     }
+                
                 return {
                     "success": True,
                     "type": "last_orders",
-                    "orders": result.get("metric_value", []),  # Use metric_value instead of orders
+                    "orders": result.get("orders", []),
                     "requested_count": count,
-                    "actual_count": len(result.get("metric_value", [])),
-                    "context": result.get("context", {})
+                    "actual_count": result.get("actualCount", 0),
+                    "context": result.get("context", "")
                 }
             
             # NEW: Get recent orders (time-based)
@@ -661,6 +663,7 @@ Generate a response based on the information above.""")
             }
     
     async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict[str, Any], was_successful: bool, conversation_context: str) -> str:
+        """Generate enhanced natural language response for all order types"""
         try:
             result_type = function_result.get("type", "general")
             
@@ -670,7 +673,7 @@ Generate a response based on the information above.""")
             total_items = function_result.get("totalItems", 0)
             error = function_result.get("error", "")
             memory_content = function_result.get("memory_content", "")
-            context = function_result.get("context", {})
+            context = function_result.get("context", "")
             statistics = function_result.get("statistics", {})
             
             # Format orders list for different result types
@@ -678,8 +681,8 @@ Generate a response based on the information above.""")
             
             if result_type == "order_status":
                 # Single order items
-                items = function_result.get("items", [])
-                for item in items:
+                items_summary = function_result.get("itemsSummary", [])
+                for item in items_summary:
                     options = item.get("options", {})
                     size = options.get("Size", "N/A")
                     orders_list.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
@@ -690,7 +693,7 @@ Generate a response based on the information above.""")
                 failed = function_result.get("failed", [])
                 
                 for order in successful:
-                    orders_list.append(f"✅ {order.get('orderId', 'Unknown')} - {order.get('aggregatedStatus', 'Unknown')} - ${order.get('total', 'N/A')}")
+                    orders_list.append(f"✅ {order.get('orderId', 'Unknown')} - {order.get('status', 'Unknown')} - ${order.get('total', 'N/A')}")
                 
                 for order in failed:
                     orders_list.append(f"❌ {order.get('orderId', 'Unknown')} - {order.get('error', 'Error')}")
@@ -700,7 +703,7 @@ Generate a response based on the information above.""")
                 orders = function_result.get("orders", [])
                 for order in orders:
                     formatted_date = order.get("formattedDate", "Unknown date")
-                    status = order.get("aggregatedStatus", "Unknown")  # Use aggregatedStatus
+                    status = order.get("orderStatus", "Unknown")
                     total = order.get("total", 0)
                     orders_list.append(f"📦 {order.get('_id', 'Unknown')} - {formatted_date} - {status} - ${total}")
             
@@ -739,6 +742,7 @@ Generate a response based on the information above.""")
                 result=function_result,
                 original_message=original_message
             )
+    
     async def _create_fallback_response(self, action: str, result: Dict[str, Any], original_message: str) -> str:
         """Create fallback response when AI generation fails"""
         if not result.get("success", False):
