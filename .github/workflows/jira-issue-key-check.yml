@@ -1,0 +1,38 @@
+name: Enforce Jira Issue Key
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  validate-branch-and-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Validate PR branch name
+        run: |
+          echo "🔍 Checking branch name: ${{ github.head_ref }}"
+          if ! [[ "${{ github.head_ref }}" =~ [A-Z]+-[0-9]+ ]]; then
+            echo "❌ Branch name must include a Jira issue key (e.g., PROJ-123)"
+            exit 1
+          fi
+
+      - name: Get commit messages
+        id: commits
+        run: |
+          commits=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$commits" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Validate commit messages
+        run: |
+          echo "🔍 Checking commit messages"
+          while read -r msg; do
+            if ! [[ "$msg" =~ [A-Z]+-[0-9]+ ]]; then
+              echo "❌ Commit message missing Jira issue key: '$msg'"
+              exit 1
+            fi
+          done <<< "${{ steps.commits.outputs.commits }}"
