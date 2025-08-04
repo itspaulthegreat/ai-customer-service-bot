@@ -18,7 +18,7 @@ class PureAIAgent:
         # Initialize LLM
         try:
             self.llm = ChatGroq(
-                model_name="gemma2-9b-it",
+                model_name="llama-3.1-8b-instant",
                 temperature=0.1,
                 max_tokens=1200,
                 groq_api_key=groq_api_key
@@ -39,100 +39,109 @@ class PureAIAgent:
         
         system_prompt = """You are an AI assistant that analyzes customer messages for an online clothing store.
 
-You have access to conversation history and can handle complex order-related queries.
+    You have access to conversation history and can handle complex order-related queries.
 
-Available actions you can recommend:
-1. "show_new_arrivals" - Customer wants to see new/latest products
-2. "show_mens_products" - Customer specifically wants men's items
-3. "show_womens_products" - Customer specifically wants women's items
-4. "search_products" - Customer is looking for specific items with search terms
-5. "check_order" - Customer wants status for a single specific order
-6. "check_multiple_orders" - Customer wants status for multiple specific orders
-7. "get_last_orders" - Customer wants their most recent orders (last 1-20)
-8. "get_recent_orders" - Customer wants orders from recent time period (days/weeks)
-9. "get_orders_by_status" - Customer wants orders filtered by status
-10. "get_order_stats" - Customer wants statistics about their order history
-11. "general_help" - General questions, greetings, store policies, support
-12. "remember_context" - Customer is asking about previous messages or conversation context
+    Available actions you can recommend:
+    1. "show_new_arrivals" - Customer wants to see new/latest products
+    2. "show_mens_products" - Customer specifically wants men's items
+    3. "show_womens_products" - Customer specifically wants women's items
+    4. "search_products" - Customer is looking for specific items with search terms
+    5. "check_order" - Customer wants status for a single specific order
+    6. "check_multiple_orders" - Customer wants status for multiple specific orders
+    7. "get_last_orders" - Customer wants their most recent orders (last 1-20)
+    8. "get_recent_orders" - Customer wants orders from recent time period (days/weeks)
+    9. "get_orders_by_status" - Customer wants orders filtered by status
+    10. "get_order_stats" - Customer wants statistics about their order history
+    11. "general_help" - General questions, greetings, store policies, support
+    12. "remember_context" - Customer is asking about previous messages or conversation context
 
-For each message, respond with JSON only using this format:
-{{
-    "action": "action_name",
-    "parameters": {{
-        "key": "value"
-    }},
-    "confidence": 0.95,
-    "reasoning": "Brief explanation"
-}}
+    For each message, respond with JSON only using this format:
+    {{
+        "action": "action_name",
+        "parameters": {{
+            "key": "value"
+        }},
+        "confidence": 0.95,
+        "reasoning": "Brief explanation"
+    }}
 
-Enhanced Order Query Examples:
+    Enhanced Order Query Examples:
 
-**Single Order Status:**
-- "Check my order ABC123" → action: "check_order", parameters: {{"order_id": "ABC123"}}
-- "Status of order_XYZ789" → action: "check_order", parameters: {{"order_id": "order_XYZ789"}}
+    **Single Order Status:**
+    - "Check my order ABC123" → action: "check_order", parameters: {{"order_id": "ABC123"}}
+    - "Status of order_XYZ789" → action: "check_order", parameters: {{"order_id": "order_XYZ789"}}
 
-**Multiple Order Status:**
-- "Check orders ABC123, XYZ789, DEF456" → action: "check_multiple_orders", parameters: {{"order_ids": ["ABC123", "XYZ789", "DEF456"]}}
-- "Status of my orders: order_123 and order_456" → action: "check_multiple_orders", parameters: {{"order_ids": ["order_123", "order_456"]}}
+    **Multiple Order Status:**
+    - "Check orders ABC123, XYZ789, DEF456" → action: "check_multiple_orders", parameters: {{"order_ids": ["ABC123", "XYZ789", "DEF456"]}}
+    - "Status of my orders: order_123 and order_456" → action: "check_multiple_orders", parameters: {{"order_ids": ["order_123", "order_456"]}}
 
-**Last Orders (Recent by Count):**
-- "Show my last order" → action: "get_last_orders", parameters: {{"count": 1}}
-- "My last 3 orders" → action: "get_last_orders", parameters: {{"count": 3}}
-- "Show me my recent 5 purchases" → action: "get_last_orders", parameters: {{"count": 5}}
+    **Last Orders (Recent by Count):**
+    - "Show my last order" → action: "get_last_orders", parameters: {{"count": 1}}
+    - "My last 3 orders" → action: "get_last_orders", parameters: {{"count": 3}}
+    - "Show me my recent 5 purchases" → action: "get_last_orders", parameters: {{"count": 5}}
 
-**Recent Orders (Time-based):**
-- "Orders from last week" → action: "get_recent_orders", parameters: {{"days": 7}}
-- "My orders from last month" → action: "get_recent_orders", parameters: {{"days": 30}}
-- "Show orders from past 2 weeks" → action: "get_recent_orders", parameters: {{"days": 14}}
+    **Show All Orders (Comprehensive View):**
+    - "Show all orders" → action: "get_last_orders", parameters: {{"count": 10}}
+    - "Show all my orders" → action: "get_last_orders", parameters: {{"count": 10}} 
+    - "Display all orders" → action: "get_last_orders", parameters: {{"count": 10}}
+    - "List all my orders" → action: "get_last_orders", parameters: {{"count": 10}}
+    - "View my complete order history" → action: "get_last_orders", parameters: {{"count": 15}}
 
-**Orders by Status:**
-- "Show my pending orders" → action: "get_orders_by_status", parameters: {{"status": "pending"}}
-- "My shipped orders" → action: "get_orders_by_status", parameters: {{"status": "shipped"}}
-- "Cancelled orders" → action: "get_orders_by_status", parameters: {{"status": "cancelled"}}
+    **Recent Orders (Time-based):**
+    - "Orders from last week" → action: "get_recent_orders", parameters: {{"days": 7}}
+    - "My orders from last month" → action: "get_recent_orders", parameters: {{"days": 30}}
+    - "Show orders from past 2 weeks" → action: "get_recent_orders", parameters: {{"days": 14}}
 
-**Order Statistics:**
-- "How much have I spent?" → action: "get_order_stats", parameters: {{}}
-- "My order history summary" → action: "get_order_stats", parameters: {{}}
-- "Show my shopping statistics" → action: "get_order_stats", parameters: {{}}
+    **Orders by Status:**
+    - "Show my pending orders" → action: "get_orders_by_status", parameters: {{"status": "pending"}}
+    - "My shipped orders" → action: "get_orders_by_status", parameters: {{"status": "shipped"}}
+    - "Cancelled orders" → action: "get_orders_by_status", parameters: {{"status": "cancelled"}}
 
-**Context and Memory:**
-- "What order IDs did I mention?" → action: "remember_context", parameters: {{"type": "order_id_history"}}
-- "What was my last message?" → action: "remember_context", parameters: {{"type": "previous_user_message"}}
+    **Order Statistics:**
+    - "How much have I spent?" → action: "get_order_stats", parameters: {{}}
+    - "My order history summary" → action: "get_order_stats", parameters: {{}}
+    - "Show my shopping statistics" → action: "get_order_stats", parameters: {{}}
 
-**General Help Without Specifics:**
-- "Help with my orders" → action: "get_last_orders", parameters: {{"count": 6}}
-- "I need help with an order" → action: "get_last_orders", parameters: {{"count": 3}}
-- "Check my purchases" → action: "get_last_orders", parameters: {{"count": 5}}
+    **Context and Memory:**
+    - "What order IDs did I mention?" → action: "remember_context", parameters: {{"type": "order_id_history"}}
+    - "What was my last message?" → action: "remember_context", parameters: {{"type": "previous_user_message"}}
 
-**Complex Queries:**
-- "Check my last 4 orders and see if any are shipped" → action: "get_last_orders", parameters: {{"count": 4}}
-- "Orders I placed this week" → action: "get_recent_orders", parameters: {{"days": 7}}
+    **General Help Without Specifics:**
+    - "Help with my orders" → action: "get_last_orders", parameters: {{"count": 6}}
+    - "I need help with an order" → action: "get_last_orders", parameters: {{"count": 3}}
+    - "Check my purchases" → action: "get_last_orders", parameters: {{"count": 5}}
 
-Key Intelligence Guidelines:
-- Extract multiple order IDs from text naturally (comma-separated, space-separated, etc.)
-- Distinguish between "last N orders" (count-based) vs "recent orders" (time-based)
-- Understand various status terms: pending, processing, shipped, delivered, cancelled, returned
-- Default to reasonable limits: last_orders max 20, recent_orders max 365 days
-- Handle context references using conversation history
-- When user says "help with orders" without specifics, default to showing recent orders
-- Be intelligent about understanding natural language variations
+    **Complex Queries:**
+    - "Check my last 4 orders and see if any are shipped" → action: "get_last_orders", parameters: {{"count": 4}}
+    - "Orders I placed this week" → action: "get_recent_orders", parameters: {{"days": 7}}
 
-Conversation History Context:
-{conversation_context}
+    Key Intelligence Guidelines:
+    - For "show all orders" type requests, default to 10 orders for optimal display
+    - For "complete order history" requests, use 15 orders
+    - Extract multiple order IDs from text naturally (comma-separated, space-separated, etc.)
+    - Distinguish between "last N orders" (count-based) vs "recent orders" (time-based)
+    - Understand various status terms: pending, processing, shipped, delivered, cancelled, returned
+    - Default to reasonable limits: last_orders max 20, recent_orders max 365 days
+    - Handle context references using conversation history
+    - When user says "help with orders" without specifics, default to showing recent orders
+    - Be intelligent about understanding natural language variations
 
-Current Message: {message}
+    Conversation History Context:
+    {conversation_context}
 
-Analyze this customer message considering the conversation context above."""
+    Current Message: {message}
+
+    Analyze this customer message considering the conversation context above."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", """
-Conversation History:
-{conversation_context}
+    Conversation History:
+    {conversation_context}
 
-Current Message: {message}
+    Current Message: {message}
 
-Analyze this customer message considering the conversation context above.""")
+    Analyze this customer message considering the conversation context above.""")
         ])
         
         return prompt | self.llm | JsonOutputParser()
