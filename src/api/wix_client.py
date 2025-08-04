@@ -57,121 +57,177 @@ class WixAPIClient:
     
     # ============== PRODUCT METHODS (Unchanged) ==============
     
-    async def get_new_arrivals(self, limit: int = 8) -> List[Dict[str, Any]]:
+    async def get_new_arrivals(self, limit: int = 8) -> Dict[str, Any]:
         """Fetch new arrivals from Wix"""
         try:
             print(f"📡 Fetching new arrivals (limit: {limit})")
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["new_arrivals"],
                     params={"limit": limit},
                     headers=self._get_headers()
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
-                        products = data if isinstance(data, list) else data.get('products', [])
-                        print(f"✅ Retrieved {len(products)} new arrivals")
-                        return products
+                        print(f"✅ Retrieved {len(data.get('metric_value', []))} new arrivals")
+                        return {
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
+                        }
                     else:
                         print(f"❌ API returned status {response.status}")
                         text = await response.text()
                         print(f"Response: {text}")
-                        return []
-                        
+                        return {
+                            "success": False,
+                            "metric_value": [],
+                            "error": "Failed to retrieve new arrivals",
+                            "code": "API_ERROR",
+                            "context": {"type": "new_arrivals"}
+                        }
+
         except Exception as e:
             print(f"❌ Error fetching new arrivals: {e}")
-            return []
-
-    async def get_mens_products(self, limit: int = 8) -> List[Dict[str, Any]]:
+            return {
+                "success": False,
+                "metric_value": [],
+                "error": str(e),
+                "code": "NETWORK_ERROR",
+                "context": {"type": "new_arrivals"}
+            }
+    async def get_mens_products(self, limit: int = 8) -> Dict[str, Any]:
         """Fetch men's products from Wix"""
         try:
             print(f"👔 Fetching men's products (limit: {limit})")
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["mens_products"],
                     params={"limit": limit},
                     headers=self._get_headers()
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
-                        products = data if isinstance(data, list) else data.get('products', [])
-                        print(f"✅ Retrieved {len(products)} men's products")
-                        return products
+                        print(f"✅ Retrieved {len(data.get('metric_value', []))} men's products")
+                        return {
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
+                        }
                     else:
                         print(f"❌ API returned status {response.status}")
-                        return []
-                        
+                        return {
+                            "success": False,
+                            "metric_value": [],
+                            "error": "Failed to retrieve men's products",
+                            "code": "API_ERROR",
+                            "context": {"type": "mens_products"}
+                        }
+
         except Exception as e:
             print(f"❌ Error fetching men's products: {e}")
-            return []
+            return {
+                "success": False,
+                "metric_value": [],
+                "error": str(e),
+                "code": "NETWORK_ERROR",
+                "context": {"type": "mens_products"}
+            }
 
-    async def get_womens_products(self, limit: int = 8) -> List[Dict[str, Any]]:
+    async def get_womens_products(self, limit: int = 8) -> Dict[str, Any]:
         """Fetch women's products from Wix"""
         try:
             print(f"👗 Fetching women's products (limit: {limit})")
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["womens_products"],
                     params={"limit": limit},
                     headers=self._get_headers()
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
-                        products = data if isinstance(data, list) else data.get('products', [])
-                        print(f"✅ Retrieved {len(products)} women's products")
-                        return products
+                        print(f"✅ Retrieved {len(data.get('metric_value', []))} women's products")
+                        return {
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
+                        }
                     else:
                         print(f"❌ API returned status {response.status}")
-                        return []
-                        
+                        return {
+                            "success": False,
+                            "metric_value": [],
+                            "error": "Failed to retrieve women's products",
+                            "code": "API_ERROR",
+                            "context": {"type": "womens_products"}
+                        }
+
         except Exception as e:
             print(f"❌ Error fetching women's products: {e}")
-            return []
+            return {
+                "success": False,
+                "metric_value": [],
+                "error": str(e),
+                "code": "NETWORK_ERROR",
+                "context": {"type": "womens_products"}
+            }
 
-    async def search_products(self, query: str, limit: int = 8) -> List[Dict[str, Any]]:
+    async def search_products(self, query: str, limit: int = 8) -> Dict[str, Any]:
         """Search products by query"""
         try:
             print(f"🔍 Searching products for: {query}")
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["search_products"],
                     params={"query": query, "limit": limit},
                     headers=self._get_headers()
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
-                        products = data if isinstance(data, list) else data.get('products', [])
-                        print(f"✅ Found {len(products)} products for query: {query}")
-                        return products
+                        print(f"✅ Found {len(data.get('metric_value', []))} products for query: {query}")
+                        return {
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
+                        }
                     else:
                         print(f"❌ Search API returned status {response.status}")
-                        return []
-                        
+                        return {
+                            "success": False,
+                            "metric_value": [],
+                            "error": "Failed to search products",
+                            "code": "API_ERROR",
+                            "context": {"type": "search_products"}
+                        }
+
         except Exception as e:
             print(f"❌ Error searching products: {e}")
-            return []
+            return {
+                "success": False,
+                "metric_value": [],
+                "error": str(e),
+                "code": "NETWORK_ERROR",
+                "context": {"type": "search_products"}
+            }
 
     # ============== EXISTING ORDER METHODS (Enhanced) ==============
 
     async def get_order_items(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
-        """Get all items in an order - Enhanced with better error handling"""
         try:
             print(f"📋 Fetching order items for order: {order_id}, user: {user_id}")
             
-            # Build params - let backend handle user validation
             params = {"orderId": order_id}
             if user_id:
                 params["userId"] = user_id
             
-            # Enhanced headers
             headers = self._get_headers(user_id)
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
@@ -183,10 +239,11 @@ class WixAPIClient:
                     
                     if response.status == 200:
                         data = await response.json()
+                        print(f"✅ Raw response: {data}") # Add this log to inspect the response
                         print(f"✅ Retrieved order items for order: {order_id}")
                         return {
                             "success": True,
-                            **data  # Include all response data
+                            **data
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
@@ -209,93 +266,104 @@ class WixAPIClient:
         """Get order summary - Enhanced"""
         try:
             print(f"📊 Fetching order summary for order: {order_id}, user: {user_id}")
-            
-            # Build params
+
             params = {"orderId": order_id}
             if user_id:
                 params["userId"] = user_id
-            
+
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["order_summary"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved order summary")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Order summary API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve order summary"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "order_summary", "orderId": order_id}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error fetching order summary: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "order_summary", "orderId": order_id}
             }
 
     async def get_user_orders(self, user_id: str, limit: int = 20, include_items: bool = False) -> Dict[str, Any]:
         """Get user's orders - Enhanced with more options"""
         try:
             print(f"📋 Fetching user orders for user: {user_id}, limit: {limit}, include_items: {include_items}")
-            
+
             if not user_id:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "User ID is required",
-                    "code": "MISSING_USER_ID"
+                    "code": "MISSING_USER_ID",
+                    "context": {"type": "user_orders"}
                 }
-            
+
             params = {
-                "userId": user_id, 
+                "userId": user_id,
                 "limit": limit,
                 "includeItems": str(include_items).lower()
             }
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["user_orders"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved user orders")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ User orders API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve user orders"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "user_orders", "userId": user_id}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error fetching user orders: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "user_orders", "userId": user_id}
             }
 
     # ============== NEW: ENHANCED ORDER MANAGEMENT METHODS ==============
@@ -304,274 +372,314 @@ class WixAPIClient:
         """Check status of multiple orders at once - NEW"""
         try:
             print(f"🔍 Checking multiple order status: {order_ids}, user: {user_id}")
-            
+
             if not order_ids or len(order_ids) == 0:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "Order IDs list is required",
-                    "code": "MISSING_PARAMETER"
+                    "code": "MISSING_PARAMETER",
+                    "context": {"type": "multiple_order_status"}
                 }
-            
+
             if len(order_ids) > 10:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "Maximum 10 orders can be checked at once",
-                    "code": "TOO_MANY_ORDERS"
+                    "code": "TOO_MANY_ORDERS",
+                    "context": {"type": "multiple_order_status"}
                 }
-            
-            # Convert list to comma-separated string for API
+
             order_ids_str = ",".join(order_ids)
-            
+
             params = {"orderIds": order_ids_str}
             if user_id:
                 params["userId"] = user_id
-            
+
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["multiple_order_status"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved multiple order status for {len(order_ids)} orders")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Multiple order status API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve multiple order status"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "multiple_order_status", "orderIds": order_ids}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error checking multiple order status: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "multiple_order_status", "orderIds": order_ids}
             }
 
     async def get_last_orders(self, user_id: str, count: int = 1) -> Dict[str, Any]:
         """Get user's last N orders - NEW"""
         try:
             print(f"📋 Fetching last {count} orders for user: {user_id}")
-            
+
             if not user_id:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "User ID is required",
-                    "code": "MISSING_USER_ID"
+                    "code": "MISSING_USER_ID",
+                    "context": {"type": "last_orders"}
                 }
-            
+
             if count < 1 or count > 20:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "Count must be between 1 and 20",
-                    "code": "INVALID_PARAMETER"
+                    "code": "INVALID_PARAMETER",
+                    "context": {"type": "last_orders"}
                 }
-            
+
             params = {
                 "userId": user_id,
                 "count": count
             }
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["last_orders"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved last {count} orders")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Last orders API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve last orders"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "last_orders", "userId": user_id}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error fetching last orders: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "last_orders", "userId": user_id}
             }
-
     async def get_recent_orders(self, user_id: str, days: int = 30) -> Dict[str, Any]:
         """Get user's orders from last N days - NEW"""
         try:
             print(f"📅 Fetching orders from last {days} days for user: {user_id}")
-            
+
             if not user_id:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "User ID is required",
-                    "code": "MISSING_USER_ID"
+                    "code": "MISSING_USER_ID",
+                    "context": {"type": "recent_orders"}
                 }
-            
+
             if days < 1 or days > 365:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "Days must be between 1 and 365",
-                    "code": "INVALID_PARAMETER"
+                    "code": "INVALID_PARAMETER",
+                    "context": {"type": "recent_orders"}
                 }
-            
+
             params = {
                 "userId": user_id,
                 "days": days
             }
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["recent_orders"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved orders from last {days} days")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Recent orders API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve recent orders"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "recent_orders", "userId": user_id}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error fetching recent orders: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "recent_orders", "userId": user_id}
             }
-
     async def get_orders_by_status(self, user_id: str, status: str, limit: int = 10) -> Dict[str, Any]:
         """Get user's orders filtered by status - NEW"""
         try:
             print(f"🏷️ Fetching orders with status '{status}' for user: {user_id}")
-            
+
             if not user_id:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "User ID is required",
-                    "code": "MISSING_USER_ID"
+                    "code": "MISSING_USER_ID",
+                    "context": {"type": "orders_by_status"}
                 }
-            
+
             if not status:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "Status parameter is required",
-                    "code": "MISSING_PARAMETER"
+                    "code": "MISSING_PARAMETER",
+                    "context": {"type": "orders_by_status"}
                 }
-            
+
             params = {
                 "userId": user_id,
                 "status": status,
                 "limit": limit
             }
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["orders_by_status"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved orders with status '{status}'")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Orders by status API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve orders by status"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "orders_by_status", "status": status}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error fetching orders by status: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "orders_by_status", "status": status}
             }
 
     async def get_user_order_stats(self, user_id: str) -> Dict[str, Any]:
         """Get comprehensive order statistics for user - NEW"""
         try:
             print(f"📊 Fetching order statistics for user: {user_id}")
-            
+
             if not user_id:
                 return {
                     "success": False,
+                    "metric_value": [],
                     "error": "User ID is required",
-                    "code": "MISSING_USER_ID"
+                    "code": "MISSING_USER_ID",
+                    "context": {"type": "user_order_stats"}
                 }
-            
+
             params = {"userId": user_id}
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["user_order_stats"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
                         print(f"✅ Retrieved order statistics")
                         return {
-                            "success": True,
-                            **data
+                            "success": data.get("success", False),
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
                         }
                     else:
                         error_data = await response.json() if response.content_type == 'application/json' else {}
                         print(f"❌ Order statistics API returned status {response.status}")
                         return {
                             "success": False,
+                            "metric_value": [],
                             "error": error_data.get("error", "Failed to retrieve order statistics"),
-                            "code": error_data.get("code", "API_ERROR")
+                            "code": error_data.get("code", "API_ERROR"),
+                            "context": {"type": "user_order_stats", "userId": user_id}
                         }
-                        
+
         except Exception as e:
             print(f"❌ Error fetching order statistics: {e}")
             return {
                 "success": False,
+                "metric_value": [],
                 "error": str(e),
-                "code": "NETWORK_ERROR"
+                "code": "NETWORK_ERROR",
+                "context": {"type": "user_order_stats", "userId": user_id}
             }
 
     # ============== HELPER AND UTILITY METHODS ==============
@@ -581,35 +689,56 @@ class WixAPIClient:
         """Legacy order status method - maintained for backward compatibility"""
         try:
             print(f"📋 Fetching legacy order status: {order_id}")
-            
+
             params = {"orderId": order_id}
             if user_id:
                 params["userId"] = user_id
-            
+
             headers = self._get_headers(user_id)
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(
                     self.endpoints["order_status"],
                     params=params,
                     headers=headers
                 ) as response:
-                    
+
                     if response.status == 200:
                         data = await response.json()
-                        if 'error' not in data:
-                            print(f"✅ Retrieved legacy order status")
-                            return data
-                        else:
+                        if 'error' in data:
                             print(f"❌ Legacy order status error: {data['error']}")
-                            return None
+                            return {
+                                "success": False,
+                                "metric_value": [],
+                                "error": data.get("error", "Unknown error"),
+                                "code": data.get("code", "API_ERROR"),
+                                "context": {"type": "order_status", "orderId": order_id}
+                            }
+                        print(f"✅ Retrieved legacy order status")
+                        return {
+                            "success": True,
+                            "metric_value": data.get("metric_value", []),
+                            "context": data.get("context", {})
+                        }
                     else:
                         print(f"❌ Legacy order status API returned status {response.status}")
-                        return None
-                        
+                        return {
+                            "success": False,
+                            "metric_value": [],
+                            "error": "Failed to retrieve order status",
+                            "code": "API_ERROR",
+                            "context": {"type": "order_status", "orderId": order_id}
+                        }
+
         except Exception as e:
             print(f"❌ Error fetching legacy order status: {e}")
-            return None
+            return {
+                "success": False,
+                "metric_value": [],
+                "error": str(e),
+                "code": "NETWORK_ERROR",
+                "context": {"type": "order_status", "orderId": order_id}
+            }
     
     async def test_connection(self) -> bool:
         """Test connection to Wix API - Enhanced with more comprehensive testing"""
