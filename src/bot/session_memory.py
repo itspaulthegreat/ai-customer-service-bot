@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-import asyncio 
+import asyncio  
 
 class ConversationMessage:
     """Single message in conversation"""
