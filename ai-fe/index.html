@@ -471,7 +471,7 @@
     <script>
         // Hardcoded test user
         const currentUser = {
-            userId: '43d05878-3efc-4bd3-bb45-051a79af8898',
+            userId: '43d05878-3efc-4bd3-bb45-051a79af8897',
             email: '43d05878-3efc-4bd3-bb45-051a79af8898',
             nickname: 'Local Tester',
             sessionId: 'local-session-001'
@@ -599,47 +599,45 @@
             sendMessage();
         }
 
-        async function handleButtonClick(apiEndpoint, orderId) {
-            try {
-                showTyping(true);
-                // Construct Wix URL for render API calls
-                const fullUrl = apiEndpoint.startsWith('/_functions') 
-                    ? `${WIX_BASE_URL}${apiEndpoint}`
-                    : `${WIX_BASE_URL}/_functions${apiEndpoint}`;
-                console.log(`📡 Fetching order items from: ${fullUrl}`);
-                const res = await fetch(fullUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-user-id': currentUser.userId,
-                        'x-user-email': currentUser.email,
-                        'x-wix-request': 'true'
-                    }
-                });
-
-                const data = await res.json();
-                if (res.ok && data.success && Array.isArray(data.metric_value)) {
-                    let responseText = `📦 Order ${orderId}:\n`;
-                    const items = data.metric_value;
-                    if (items.length === 0) {
-                        responseText += `No items found for this order.`;
-                    } else {
-                        items.forEach(item => {
-                            responseText += `• ${item.name || 'Unknown Item'} (Size: ${item.options?.Size || 'N/A'}, Quantity: ${item.quantity || 1}, Status: ${item.shipmentStatus || 'Unknown'})\n`;
-                        });
-                    }
-                    addMessageWithRender(responseText, 'bot');
-                } else {
-                    addMessageWithRender(`Sorry, I couldn't retrieve details for order ${orderId}.`, 'bot');
-                    showError(data.error || 'Failed to fetch order details.');
+    async function handleButtonClick(apiEndpoint, orderId) {
+        try {
+            showTyping(true);
+            // Call proxy endpoint with api parameter
+            const fullUrl = `${API_BASE}/proxy?api=${encodeURIComponent(apiEndpoint)}`;
+            console.log(`📡 Fetching from proxy: ${fullUrl}`);
+            const res = await fetch(fullUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-id': currentUser.userId,
+                    'x-user-email': currentUser.email,
+                    'x-wix-request': 'true'
                 }
-            } catch (err) {
-                addMessageWithRender(`Oops! Something went wrong while fetching order ${orderId}.`, 'bot');
-                showError(`Error: ${err.message}`);
-            } finally {
-                showTyping(false);
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success && Array.isArray(data.metric_value)) {
+                let responseText = `📦 Order ${orderId}:\n`;
+                const items = data.metric_value;
+                if (items.length === 0) {
+                    responseText += `No items found for this order.`;
+                } else {
+                    items.forEach(item => {
+                        responseText += `• ${item.name || 'Unknown Item'} (Size: ${item.options?.Size || 'N/A'}, Quantity: ${item.quantity || 1}, Status: ${item.shipmentStatus || 'Unknown'})\n`;
+                    });
+                }
+                addMessageWithRender(responseText, 'bot');
+            } else {
+                addMessageWithRender(`Sorry, I couldn't retrieve details for order ${orderId}.`, 'bot');
+                showError(data.error || 'Failed to fetch order details.');
             }
+        } catch (err) {
+            addMessageWithRender(`Oops! Something went wrong while fetching order ${orderId}.`, 'bot');
+            showError(`Error: ${err.message}`);
+        } finally {
+            showTyping(false);
         }
+    }
 
         function addMessageWithRender(content, sender, render = []) {
             console.log('addMessageWithRender called with:', { content, sender, render });

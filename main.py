@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import requests
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate
@@ -368,6 +368,32 @@ async def test_ai():
             "system": "enhanced_ai",
             "test_status": "failed"
         }
+@app.get("/proxy")
+async def proxy_wix_endpoint(request: Request, api: str):
+    try:
+        # Construct Wix URL from api parameter
+        query_string = request.query_params
+        # Remove leading slashes and ensure proper path
+        endpoint = api.lstrip('/').replace('/_functions/', '')
+        url = f"{WIX_BASE_URL}/_functions/{endpoint}"
+        if query_string:
+            # Exclude the 'api' parameter from query string
+            query_params = {k: v for k, v in query_string.items() if k != 'api'}
+            if query_params:
+                url += f"?{requests.compat.urlencode(query_params)}"
+        headers = {
+            "Content-Type": "application/json",
+            "x-user-id": request.headers.get("x-user-id", ""),
+            "x-user-email": request.headers.get("x-user-email", ""),
+            "x-wix-request": "true"
+        }
+        print(f"📡 Proxying request to: {url}")
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"❌ Proxy error for {api}: {str(e)}")
+        return {"success": False, "error": str(e), "code": "PROXY_ERROR"}
 
 @app.get("/test-wix")
 async def test_wix():
