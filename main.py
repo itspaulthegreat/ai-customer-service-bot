@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -37,6 +37,10 @@ class ChatMessage(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     confidence: float = 0.8
+    render: Optional[List[Any]] = []  # Add render field
+    action: Optional[str] = None
+    success: Optional[bool] = True
+    reasoning: Optional[str] = None
 
 # Initialize Groq LLM
 try:
@@ -168,7 +172,6 @@ async def chat(message: ChatMessage):
         print(f"👤 User ID: {message.user_id}")
         
         if use_ai_system:
-            # 🆕 ENHANCED: Pass user_id to the agent for all order-related queries
             result = await agent.process_message(
                 message.message, 
                 user_id=message.user_id
@@ -176,10 +179,13 @@ async def chat(message: ChatMessage):
             
             return ChatResponse(
                 response=result["response"],
-                confidence=result["confidence"]
+                confidence=result["confidence"],
+                render=result["render"],  # Include render
+                action=result["action"],
+                success=result["success"],
+                reasoning=result["reasoning"]
             )
         else:
-            # Fallback to legacy system
             response_text = legacy_process_message(message.message)
             return ChatResponse(response=response_text, confidence=0.9)
     
@@ -187,7 +193,6 @@ async def chat(message: ChatMessage):
         print(f"❌ Error in chat: {e}")
         import traceback
         traceback.print_exc()
-        
         return ChatResponse(
             response="I apologize for the technical difficulty. Please try again or contact our customer service team.",
             confidence=0.1

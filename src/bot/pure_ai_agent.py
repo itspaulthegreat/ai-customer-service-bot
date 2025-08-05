@@ -228,7 +228,6 @@ Generate a response based on the information above.""")
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using enhanced AI intelligence"""
         try:
             print(f"🤖 Enhanced AI processing: {message} (user_id: {user_id})")
             
@@ -268,7 +267,7 @@ Generate a response based on the information above.""")
             was_successful = action_result.get("success", True)
             print(f"🤖 Telling AI that success = {was_successful}")
             
-            response_text = await self._generate_natural_response(
+            response_data = await self._generate_natural_response(
                 original_message=message,
                 action_taken=action,
                 function_result=action_result,
@@ -276,14 +275,15 @@ Generate a response based on the information above.""")
                 conversation_context=conversation_context
             )
             
-            print(f"💬 AI generated response (first 100 chars): {response_text[:100]}...")
+            print(f"💬 AI generated response (first 100 chars): {response_data['content'][:100]}...")
             
             # Add bot response to memory
             if user_id:
-                self.memory.add_message(user_id, response_text, 'bot')
+                self.memory.add_message(user_id, response_data['content'], 'bot')
             
             return {
-                "response": response_text,
+                "response": response_data['content'],
+                "render": response_data['render'],  # Include render instructions
                 "confidence": confidence,
                 "action": action,
                 "success": action_result.get("success", True),
@@ -296,7 +296,6 @@ Generate a response based on the information above.""")
             traceback.print_exc()
             
             return await self._handle_error_intelligently(message, str(e))
-    
     async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the determined action using enhanced Wix API"""
         try:
@@ -473,7 +472,7 @@ Generate a response based on the information above.""")
                 return {
                     "success": True,
                     "type": "last_orders",
-                    "orders": result.get("metric_value", []),  # Use metric_value instead of orders
+                    "metric_value": result.get("metric_value", []),  # Changed from "orders" to "metric_value"
                     "requested_count": count,
                     "actual_count": len(result.get("metric_value", [])),
                     "context": result.get("context", {})
@@ -660,7 +659,7 @@ Generate a response based on the information above.""")
                 "memory_content": "I remember our conversation and I'm here to help! What would you like to know?"
             }
     
-    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict[str, Any], was_successful: bool, conversation_context: str) -> str:
+    async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict[str, Any], was_successful: bool, conversation_context: str) -> Dict[str, Any]:
         try:
             result_type = function_result.get("type", "general")
             
@@ -675,6 +674,7 @@ Generate a response based on the information above.""")
             
             # Format orders list for different result types
             orders_list = []
+            render_list = []  # New: Store render instructions
             
             if result_type == "order_status":
                 # Single order items
@@ -683,6 +683,7 @@ Generate a response based on the information above.""")
                     options = item.get("options", {})
                     size = options.get("Size", "N/A")
                     orders_list.append(f"{item.get('name', 'Unknown')} (Size {size}) - {item.get('shipmentStatus', 'Unknown')}")
+                    render_list.append(item.get("render", []))  # Include render for items
             
             elif result_type == "multiple_order_status":
                 # Multiple order results
@@ -691,18 +692,21 @@ Generate a response based on the information above.""")
                 
                 for order in successful:
                     orders_list.append(f"✅ {order.get('orderId', 'Unknown')} - {order.get('aggregatedStatus', 'Unknown')} - ${order.get('total', 'N/A')}")
+                    render_list.append(order.get("render", []))  # Include render for successful orders
                 
                 for order in failed:
                     orders_list.append(f"❌ {order.get('orderId', 'Unknown')} - {order.get('error', 'Error')}")
+                    render_list.append([])  # No render for failed orders
             
             elif result_type in ["last_orders", "recent_orders", "orders_by_status"]:
-                # Order lists
-                orders = function_result.get("orders", [])
+                # Order lists - FIXED: Use metric_value instead of orders
+                orders = function_result.get("metric_value", [])  # Changed from "orders" to "metric_value"
                 for order in orders:
                     formatted_date = order.get("formattedDate", "Unknown date")
-                    status = order.get("aggregatedStatus", "Unknown")  # Use aggregatedStatus
+                    status = order.get("aggregatedStatus", "Unknown")
                     total = order.get("total", 0)
                     orders_list.append(f"📦 {order.get('_id', 'Unknown')} - {formatted_date} - {status} - ${total}")
+                    render_list.append(order.get("render", []))  # Include render for orders
             
             elif result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
                 # Product lists
@@ -710,6 +714,7 @@ Generate a response based on the information above.""")
                 for product in products[:5]:  # Limit to 5 for readability
                     price = product.get("formattedPrice", product.get("price", "N/A"))
                     orders_list.append(f"🛍️ {product.get('name', 'Unknown')} - {price}")
+                    render_list.append(product.get("render", []))  # Include render for products
             
             # Generate response using AI
             response = await asyncio.to_thread(
@@ -730,15 +735,23 @@ Generate a response based on the information above.""")
                 }
             )
             
-            return response.content
-        
+            print(f"🔍 Generated render_list: {render_list}")  # Debug log to verify render_list
+            
+            return {
+                "content": response.content,
+                "render": render_list  # Return render instructions
+            }
+            
         except Exception as e:
             print(f"❌ Error generating enhanced natural response: {str(e)}")
-            return await self._create_fallback_response(
-                action=action_taken,
-                result=function_result,
-                original_message=original_message
-            )
+            return {
+                "content": await self._create_fallback_response(
+                    action=action_taken,
+                    result=function_result,
+                    original_message=original_message
+                ),
+                "render": []
+            }
     async def _create_fallback_response(self, action: str, result: Dict[str, Any], original_message: str) -> str:
         """Create fallback response when AI generation fails"""
         if not result.get("success", False):
