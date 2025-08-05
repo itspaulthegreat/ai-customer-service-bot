@@ -1,0 +1,849 @@
+// backend/orderService.jsw - ENHANCED VERSION WITH RENDER TYPE SUPPORT
+import wixData from 'wix-data';
+
+export class OrderService {
+
+    // Helper to aggregate order status from OrderItems (unchanged)
+    async _aggregateOrderStatus(orderId, userId = null) {
+        try {
+            console.log(`[OrderService._aggregateOrderStatus] Processing orderId=${orderId}, userId=${userId}`);
+
+            const itemsResult = await wixData.query("OrderItems")
+                .eq("orderId", orderId)
+                .find();
+            console.log(`[OrderService._aggregateOrderStatus] Found ${itemsResult.items.length} items for orderId=${orderId}`);
+
+            if (itemsResult.items.length === 0) {
+                console.error(`[OrderService._aggregateOrderStatus] No items found for orderId=${orderId}`);
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: "No items found for order",
+                    code: "NOT_FOUND",
+                    context: { type: "aggregate_status", orderId: orderId }
+                };
+            }
+
+            const statuses = itemsResult.items.map(item => item.shipmentStatus || "Processing");
+            const uniqueStatuses = [...new Set(statuses)];
+            console.log(`[OrderService._aggregateOrderStatus] Statuses: ${statuses.join(', ')}, Unique: ${uniqueStatuses.join(', ')}`);
+
+            let aggregatedStatus = "Processing";
+            let hasMixedStatus = uniqueStatuses.length > 1;
+
+            if (uniqueStatuses.length === 1) {
+                aggregatedStatus = uniqueStatuses[0];
+            } else {
+                if (statuses.includes("Pending") || statuses.includes("Processing")) {
+                    aggregatedStatus = "Partially Processed";
+                } else if (statuses.includes("Shipped") || statuses.includes("Delivered")) {
+                    aggregatedStatus = "Partially Shipped";
+                } else if (statuses.includes("Cancelled")) {
+                    aggregatedStatus = "Partially Cancelled";
+                }
+            }
+
+            console.log(`[OrderService._aggregateOrderStatus] Aggregated Status: ${aggregatedStatus}, hasMixedStatus=${hasMixedStatus}`);
+
+            const statusDetails = itemsResult.items.map(item => ({
+                name: item.name || 'Unknown Item',
+                shipmentStatus: item.shipmentStatus || 'Processing',
+                quantity: item.quantity || 1
+            }));
+
+            return {
+                success: true,
+                metric_value: statusDetails,
+                context: {
+                    type: "aggregate_status",
+                    orderId: orderId,
+                    aggregatedStatus: aggregatedStatus,
+                    hasMixedStatus: hasMixedStatus
+                }
+            };
+        } catch (error) {
+            console.error(`[OrderService._aggregateOrderStatus] Exception for orderId=${orderId}:`, error);
+            return {
+                success: false,
+                metric_value: [],
+                error: "Failed to aggregate order status: " + error.message,
+                code: "SERVER_ERROR",
+                context: { type: "aggregate_status", orderId: orderId }
+            };
+        }
+    }
+
+    // NEW: Helper to add render types based on order data
+    _addRenderTypes(orders, options = {}) {
+        const { includeStatusButtons = true, includeActionButtons = true, includeOrderSummary = true } = options;
+        
+        return orders.map(order => {
+            const renderItems = [];
+            
+            // Main order summary (always included)
+            if (includeOrderSummary) {
+                renderItems.push({
+                    ...order,
+                    renderType: "order_summary",
+                    displayText: `Order ${order._id}`,
+                    status: order.aggregatedStatus,
+                    total: order.total,
+                    date: order.formattedDate,
+                    itemCount: order.totalItems || 0
+                });
+            }
+            
+            // Status indicator as button
+            if (includeStatusButtons) {
+                const statusConfig = this._getStatusButtonConfig(order.aggregatedStatus);
+                renderItems.push({
+                    id: `status_${order._id}`,
+                    renderType: "button",
+                    buttonType: "status",
+                    displayText: order.aggregatedStatus,
+                    className: statusConfig.className,
+                    icon: statusConfig.icon,
+                    orderId: order._id,
+                    clickable: true,
+                    action: "view_order_details"
+                });
+            }
+            
+            // Action buttons based on order status
+            if (includeActionButtons) {
+                const actionButtons = this._getActionButtons(order);
+                renderItems.push(...actionButtons);
+            }
+            
+            // Individual items with render types
+            if (order.items && order.items.length > 0) {
+                order.items.forEach((item, index) => {
+                    renderItems.push({
+                        id: `item_${order._id}_${index}`,
+                        renderType: "order_item",
+                        displayText: item.name,
+                        status: item.shipmentStatus,
+                        quantity: item.quantity,
+                        orderId: order._id,
+                        itemData: item
+                    });
+                });
+            }
+            
+            return {
+                ...order,
+                renderItems: renderItems,
+                originalOrder: order // Keep original data
+            };
+        });
+    }
+    
+    // NEW: Get status button configuration
+    _getStatusButtonConfig(status) {
+        const configs = {
+            "Pending": { className: "status-pending", icon: "⏳" },
+            "Processing": { className: "status-processing", icon: "🔄" },
+            "Shipped": { className: "status-shipped", icon: "🚚" },
+            "Delivered": { className: "status-delivered", icon: "✅" },
+            "Cancelled": { className: "status-cancelled", icon: "❌" },
+            "Partially Processed": { className: "status-partial", icon: "⚪" },
+            "Partially Shipped": { className: "status-partial", icon: "🟡" },
+            "Partially Cancelled": { className: "status-partial", icon: "🟠" }
+        };
+        
+        return configs[status] || { className: "status-unknown", icon: "❓" };
+    }
+    
+    // NEW: Get action buttons based on order status
+    _getActionButtons(order) {
+        const buttons = [];
+        const status = order.aggregatedStatus;
+        
+        // Track order button (always available)
+        buttons.push({
+            id: `track_${order._id}`,
+            renderType: "button",
+            buttonType: "action",
+            displayText: "Track Order",
+            className: "btn-track",
+            icon: "📦",
+            orderId: order._id,
+            clickable: true,
+            action: "track_order"
+        });
+        
+        // Status-specific buttons
+        if (status === "Delivered") {
+            buttons.push({
+                id: `review_${order._id}`,
+                renderType: "button",
+                buttonType: "action",
+                displayText: "Leave Review",
+                className: "btn-review",
+                icon: "⭐",
+                orderId: order._id,
+                clickable: true,
+                action: "leave_review"
+            });
+            
+            buttons.push({
+                id: `return_${order._id}`,
+                renderType: "button",
+                buttonType: "action",
+                displayText: "Return Items",
+                className: "btn-return",
+                icon: "↩️",
+                orderId: order._id,
+                clickable: true,
+                action: "initiate_return"
+            });
+        }
+        
+        if (status === "Pending" || status === "Processing") {
+            buttons.push({
+                id: `cancel_${order._id}`,
+                renderType: "button",
+                buttonType: "action",
+                displayText: "Cancel Order",
+                className: "btn-cancel",
+                icon: "🚫",
+                orderId: order._id,
+                clickable: true,
+                action: "cancel_order",
+                requiresConfirmation: true
+            });
+        }
+        
+        if (status === "Shipped") {
+            buttons.push({
+                id: `delivery_${order._id}`,
+                renderType: "button",
+                buttonType: "info",
+                displayText: "Expected Delivery",
+                className: "btn-delivery-info",
+                icon: "📅",
+                orderId: order._id,
+                clickable: false,
+                displayOnly: true,
+                infoText: "2-3 business days"
+            });
+        }
+        
+        return buttons;
+    }
+
+    // Get order items (unchanged)
+    async getOrderItems(orderId, userId = null) {
+        try {
+            console.log(`Getting order items for orderId: ${orderId}, userId: ${userId}`);
+
+            let orderQuery = wixData.query("Orders").eq("_id", orderId);
+            if (userId) {
+                orderQuery = orderQuery.eq("userId", userId);
+            }
+
+            const orderResult = await orderQuery.find();
+            if (orderResult.items.length === 0) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Order not found or access denied',
+                    code: 'NOT_FOUND',
+                    context: { type: "order_items", orderId: orderId }
+                };
+            }
+
+            const orderItemsResult = await wixData.query("OrderItems")
+                .eq("orderId", orderId)
+                .find();
+
+            const simplifiedItems = orderItemsResult.items.map(item => ({
+                name: item.name || 'Unknown Item',
+                catalogItemId: item.catalogItemId,
+                shipmentStatus: item.shipmentStatus || 'Processing',
+                options: item.options || {},
+                quantity: item.quantity || 1,
+                price: item.price
+            }));
+
+            const statusGroups = {};
+            simplifiedItems.forEach(item => {
+                const status = item.shipmentStatus;
+                if (!statusGroups[status]) {
+                    statusGroups[status] = [];
+                }
+                statusGroups[status].push(item);
+            });
+
+            return {
+                success: true,
+                metric_value: simplifiedItems,
+                context: {
+                    type: "order_items",
+                    orderId: orderId,
+                    totalItems: simplifiedItems.length,
+                    statusGroups: statusGroups,
+                    uniqueStatuses: Object.keys(statusGroups)
+                }
+            };
+        } catch (error) {
+            console.error('Error getting order items:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve order items',
+                code: 'SERVER_ERROR',
+                context: { type: "order_items", orderId: orderId }
+            };
+        }
+    }
+
+    // Get order summary (unchanged)
+    async getOrderSummary(orderId, userId = null) {
+        try {
+            console.log(`Getting order summary for orderId: ${orderId}, userId: ${userId}`);
+
+            let orderQuery = wixData.query("Orders").eq("_id", orderId);
+            if (userId) {
+                orderQuery = orderQuery.eq("userId", userId);
+            }
+
+            const orderResult = await orderQuery.find();
+            if (orderResult.items.length === 0) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Order not found or access denied',
+                    code: 'NOT_FOUND',
+                    context: { type: "order_summary", orderId: orderId }
+                };
+            }
+
+            const order = orderResult.items[0];
+
+            const itemCountResult = await wixData.query("OrderItems")
+                .eq("orderId", orderId)
+                .count();
+
+            const statusInfo = await this._aggregateOrderStatus(orderId, userId);
+
+            return {
+                success: true,
+                metric_value: [{
+                    _id: order._id,
+                    aggregatedStatus: statusInfo.context.aggregatedStatus,
+                    total: order.totalAmount,
+                    _createdDate: order._createdDate,
+                    formattedDate: this._formatDate(order._createdDate),
+                    daysSinceOrder: this._getDaysSince(order._createdDate)
+                }],
+                context: {
+                    type: "order_summary",
+                    orderId: orderId,
+                    itemCount: itemCountResult,
+                    statusDetails: statusInfo.metric_value,
+                    hasMixedStatus: statusInfo.context.hasMixedStatus
+                }
+            };
+        } catch (error) {
+            console.error('Error getting order summary:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve order summary',
+                code: 'SERVER_ERROR',
+                context: { type: "order_summary", orderId: orderId }
+            };
+        }
+    }
+
+    // Get user's orders (unchanged)
+    async getUserOrders(userId, options = {}) {
+        try {
+            if (!userId) {
+                console.error('[OrderService.getUserOrders] Error: User ID is required');
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'User ID is required',
+                    code: 'MISSING_USER_ID',
+                    context: { type: "user_orders" }
+                };
+            }
+
+            const {
+                limit = 6,
+                offset = 0,
+                includeItems = false,
+                sortBy = '_createdDate',
+                sortOrder = 'desc'
+            } = options;
+
+            console.log(`[OrderService.getUserOrders] Input: userId=${userId}, limit=${limit}, offset=${offset}, includeItems=${includeItems}, sortBy=${sortBy}, sortOrder=${sortOrder}`);
+
+            let query = wixData.query("Orders")
+                .eq("userId", userId)
+                .limit(limit)
+                .skip(offset);
+
+            if (sortOrder === 'desc') {
+                query = query.descending(sortBy);
+            } else {
+                query = query.ascending(sortBy);
+            }
+
+            const ordersResult = await query.find();
+            console.log(`[OrderService.getUserOrders] Query Result: found ${ordersResult.items.length} orders`);
+
+            const totalCount = await wixData.query("Orders")
+                .eq("userId", userId)
+                .count();
+            console.log(`[OrderService.getUserOrders] Total Orders Count: ${totalCount}`);
+
+            const processedOrders = [];
+
+            for (const order of ordersResult.items) {
+                console.log(`[OrderService.getUserOrders] Processing order: ${order._id}`);
+                const statusInfo = await this._aggregateOrderStatus(order._id, userId);
+                console.log(`[OrderService.getUserOrders] StatusInfo for ${order._id}: success=${statusInfo.success}, aggregatedStatus=${statusInfo.context.aggregatedStatus}`);
+
+                const orderData = {
+                    _id: order._id,
+                    aggregatedStatus: statusInfo.context.aggregatedStatus,
+                    total: order.totalAmount,
+                    _createdDate: order._createdDate,
+                    formattedDate: this._formatDate(order._createdDate),
+                    daysSinceOrder: this._getDaysSince(order._createdDate),
+                    hasMixedStatus: statusInfo.context.hasMixedStatus,
+                    statusDetails: statusInfo.metric_value
+                };
+
+                if (includeItems) {
+                    const itemsResult = await this.getOrderItems(order._id, userId);
+                    console.log(`[OrderService.getUserOrders] Items for ${order._id}: success=${itemsResult.success}, item_count=${itemsResult.metric_value.length}`);
+                    if (itemsResult.success) {
+                        orderData.items = itemsResult.metric_value;
+                        orderData.totalItems = itemsResult.context.totalItems;
+                        orderData.statusGroups = itemsResult.context.statusGroups;
+                    } else {
+                        orderData.items = [];
+                        orderData.totalItems = 0;
+                    }
+                }
+
+                processedOrders.push(orderData);
+            }
+
+            console.log(`[OrderService.getUserOrders] Processed ${processedOrders.length} orders for userId=${userId}`);
+            return {
+                success: true,
+                metric_value: processedOrders,
+                context: {
+                    type: "user_orders",
+                    totalOrders: processedOrders.length,
+                    totalAvailable: totalCount,
+                    hasMore: (offset + limit) < totalCount,
+                    pagination: {
+                        limit,
+                        offset,
+                        total: totalCount,
+                        currentPage: Math.floor(offset / limit) + 1,
+                        totalPages: Math.ceil(totalCount / limit)
+                    }
+                }
+            };
+        } catch (error) {
+            console.error('[OrderService.getUserOrders] Exception:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve orders: ' + error.message,
+                code: 'SERVER_ERROR',
+                context: { type: "user_orders" }
+            };
+        }
+    }
+
+    // Get multiple order status (unchanged)
+    async getMultipleOrderStatus(orderIds, userId = null) {
+        try {
+            console.log(`Getting multiple order status for orders: ${orderIds.join(', ')}, userId: ${userId}`);
+
+            if (!Array.isArray(orderIds) || orderIds.length === 0) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Order IDs array is required',
+                    code: 'MISSING_PARAMETER',
+                    context: { type: "multiple_order_status" }
+                };
+            }
+
+            if (orderIds.length > 10) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Maximum 10 orders can be checked at once',
+                    code: 'TOO_MANY_ORDERS',
+                    context: { type: "multiple_order_status" }
+                };
+            }
+
+            const successful = [];
+            const failed = [];
+
+            for (const orderId of orderIds) {
+                try {
+                    const orderResult = await this.getOrderSummary(orderId, userId);
+
+                    if (orderResult.success) {
+                        successful.push({
+                            orderId: orderId,
+                            aggregatedStatus: orderResult.metric_value[0].aggregatedStatus,
+                            total: orderResult.metric_value[0].total,
+                            createdDate: orderResult.metric_value[0]._createdDate,
+                            itemCount: orderResult.context.itemCount,
+                            statusDetails: orderResult.context.statusDetails,
+                            hasMixedStatus: orderResult.context.hasMixedStatus
+                        });
+                    } else {
+                        failed.push({
+                            orderId: orderId,
+                            error: orderResult.error,
+                            code: orderResult.code
+                        });
+                    }
+                } catch (error) {
+                    failed.push({
+                        orderId: orderId,
+                        error: 'Failed to process order',
+                        code: 'PROCESSING_ERROR'
+                    });
+                }
+            }
+
+            return {
+                success: true,
+                metric_value: successful,
+                context: {
+                    type: "multiple_order_status",
+                    requestedOrders: orderIds.length,
+                    successfulOrders: successful.length,
+                    failedOrders: failed.length,
+                    failed: failed,
+                    summary: {
+                        totalChecked: orderIds.length,
+                        successRate: (successful.length / orderIds.length) * 100
+                    }
+                }
+            };
+        } catch (error) {
+            console.error('Error getting multiple order status:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve multiple order status',
+                code: 'SERVER_ERROR',
+                context: { type: "multiple_order_status" }
+            };
+        }
+    }
+
+    // ENHANCED: Get last N orders with render types
+    async getLastOrders(userId, count = 1, includeRenderTypes = true) {
+        try {
+            console.log(`[OrderService.getLastOrders] Input: userId=${userId}, count=${count}, includeRenderTypes=${includeRenderTypes}`);
+
+            if (count < 1 || count > 20) {
+                console.error(`[OrderService.getLastOrders] Invalid count=${count}, must be between 1 and 20`);
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Count must be between 1 and 20',
+                    code: 'INVALID_PARAMETER',
+                    context: { type: "last_orders" }
+                };
+            }
+
+            const result = await this.getUserOrders(userId, {
+                limit: count,
+                includeItems: true
+            });
+
+            console.log(`[OrderService.getLastOrders] getUserOrders Result: success=${result.success}, orders_count=${result.metric_value.length}, totalOrders=${result.context.totalOrders}`);
+
+            if (!result.success) {
+                console.error(`[OrderService.getLastOrders] getUserOrders Error: ${result.error}, code=${result.code}`);
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: result.error,
+                    code: result.code,
+                    context: { type: "last_orders" }
+                };
+            }
+
+            let processedOrders = result.metric_value;
+
+            // NEW: Add render types if requested
+            if (includeRenderTypes) {
+                console.log(`[OrderService.getLastOrders] Adding render types to ${processedOrders.length} orders`);
+                processedOrders = this._addRenderTypes(processedOrders, {
+                    includeStatusButtons: true,
+                    includeActionButtons: true,
+                    includeOrderSummary: true
+                });
+            }
+
+            console.log(`[OrderService.getLastOrders] Processed ${processedOrders.length} orders for userId=${userId}`);
+            return {
+                success: true,
+                metric_value: processedOrders,
+                context: {
+                    type: "last_orders",
+                    requestedCount: count,
+                    actualCount: processedOrders.length,
+                    context: count === 1 ? 'last_order' : `last_${count}_orders`,
+                    includeRenderTypes: includeRenderTypes,
+                    renderTypesEnabled: includeRenderTypes
+                }
+            };
+        } catch (error) {
+            console.error('[OrderService.getLastOrders] Exception:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve last orders: ' + error.message,
+                code: 'SERVER_ERROR',
+                context: { type: "last_orders" }
+            };
+        }
+    }
+
+    // Get recent orders (unchanged)
+    async getRecentOrders(userId, days = 30) {
+        try {
+            console.log(`Getting recent orders (last ${days} days) for userId: ${userId}`);
+
+            if (days < 1 || days > 365) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Days must be between 1 and 365',
+                    code: 'INVALID_PARAMETER',
+                    context: { type: "recent_orders" }
+                };
+            }
+
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - days);
+
+            const ordersResult = await wixData.query("Orders")
+                .eq("userId", userId)
+                .gt("_createdDate", cutoffDate)
+                .descending("_createdDate")
+                .find();
+
+            const recentOrders = [];
+            for (const order of ordersResult.items) {
+                const statusInfo = await this._aggregateOrderStatus(order._id, userId);
+                recentOrders.push({
+                    _id: order._id,
+                    aggregatedStatus: statusInfo.context.aggregatedStatus,
+                    total: order.totalAmount,
+                    _createdDate: order._createdDate,
+                    formattedDate: this._formatDate(order._createdDate),
+                    daysSinceOrder: this._getDaysSince(order._createdDate),
+                    hasMixedStatus: statusInfo.context.hasMixedStatus,
+                    statusDetails: statusInfo.metric_value
+                });
+            }
+
+            return {
+                success: true,
+                metric_value: recentOrders,
+                context: {
+                    type: "recent_orders",
+                    totalOrders: recentOrders.length,
+                    dateRange: {
+                        from: cutoffDate.toISOString(),
+                        to: new Date().toISOString(),
+                        days: days
+                    },
+                    context: 'recent_orders'
+                }
+            };
+        } catch (error) {
+            console.error('Error getting recent orders:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve recent orders',
+                code: 'SERVER_ERROR',
+                context: { type: "recent_orders" }
+            };
+        }
+    }
+
+    // Get orders by status (unchanged)
+    async getOrdersByStatus(userId, status, limit = 10) {
+        try {
+            console.log(`Getting orders by status: ${status} for userId: ${userId}`);
+
+            if (!userId) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'User ID is required',
+                    code: 'MISSING_USER_ID',
+                    context: { type: "orders_by_status" }
+                };
+            }
+
+            if (!status) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Status parameter is required',
+                    code: 'MISSING_PARAMETER',
+                    context: { type: "orders_by_status" }
+                };
+            }
+
+            const ordersResult = await wixData.query("Orders")
+                .eq("userId", userId)
+                .descending("_createdDate")
+                .limit(limit)
+                .find();
+
+            const matchingOrders = [];
+            for (const order of ordersResult.items) {
+                const statusInfo = await this._aggregateOrderStatus(order._id, userId);
+                if (statusInfo.context.aggregatedStatus.toLowerCase() === status.toLowerCase() ||
+                    (status.toLowerCase() === 'partially processed' && statusInfo.context.hasMixedStatus)) {
+                    matchingOrders.push({
+                        _id: order._id,
+                        aggregatedStatus: statusInfo.context.aggregatedStatus,
+                        total: order.totalAmount,
+                        _createdDate: order._createdDate,
+                        formattedDate: this._formatDate(order._createdDate),
+                        hasMixedStatus: statusInfo.context.hasMixedStatus,
+                        statusDetails: statusInfo.metric_value
+                    });
+                }
+            }
+
+            return {
+                success: true,
+                metric_value: matchingOrders,
+                context: {
+                    type: "orders_by_status",
+                    totalOrders: matchingOrders.length,
+                    filterStatus: status
+                }
+            };
+        } catch (error) {
+            console.error('Error getting orders by status:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve orders by status',
+                code: 'SERVER_ERROR',
+                context: { type: "orders_by_status" }
+            };
+        }
+    }
+
+    // Get order statistics for user (unchanged)
+    async getUserOrderStats(userId) {
+        try {
+            console.log(`Getting order statistics for userId: ${userId}`);
+
+            if (!userId) {
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'User ID is required',
+                    code: 'MISSING_USER_ID',
+                    context: { type: "user_order_stats" }
+                };
+            }
+
+            const allOrdersResult = await wixData.query("Orders")
+                .eq("userId", userId)
+                .find();
+
+            const orders = allOrdersResult.items;
+
+            const stats = {
+                totalOrders: orders.length,
+                totalSpent: orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+                averageOrderValue: 0,
+                statusBreakdown: {},
+                firstOrderDate: null,
+                lastOrderDate: null,
+                orderFrequency: 0
+            };
+
+            if (orders.length > 0) {
+                stats.averageOrderValue = stats.totalSpent / orders.length;
+
+                for (const order of orders) {
+                    const statusInfo = await this._aggregateOrderStatus(order._id, userId);
+                    const status = statusInfo.context.aggregatedStatus || 'Unknown';
+                    stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1;
+                }
+
+                const dates = orders.map(o => new Date(o._createdDate)).sort();
+                stats.firstOrderDate = dates[0];
+                stats.lastOrderDate = dates[dates.length - 1];
+
+                const daysDiff = (stats.lastOrderDate - stats.firstOrderDate) / (1000 * 60 * 60 * 24);
+                stats.orderFrequency = daysDiff > 0 ? (orders.length / (daysDiff / 30)) : 0;
+            }
+
+            return {
+                success: true,
+                metric_value: [stats],
+                context: { type: "user_order_stats", context: 'user_order_statistics' }
+            };
+        } catch (error) {
+            console.error('Error getting user order stats:', error);
+            return {
+                success: false,
+                metric_value: [],
+                error: 'Failed to retrieve order statistics',
+                code: 'SERVER_ERROR',
+                context: { type: "user_order_stats" }
+            };
+        }
+    }
+
+    // Helper methods (unchanged)
+    _formatDate(date) {
+        try {
+            const d = new Date(date);
+            return d.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        } catch (error) {
+            return 'Unknown date';
+        }
+    }
+
+    _getDaysSince(date) {
+        try {
+            const now = new Date();
+            const orderDate = new Date(date);
+            const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays;
+        } catch (error) {
+            return 0;
+        }
+    }
+}
+
+export const orderService = new OrderService();
