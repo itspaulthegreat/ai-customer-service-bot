@@ -12,6 +12,16 @@ class PureAIAgent:
     """Enhanced Pure AI-driven customer service agent with renderType support"""
     
     def __init__(self, groq_api_key: str, wix_client):
+        """
+        Initialize the PureAIAgent with Groq LLM integration, session memory, and Wix client API.
+        
+        Parameters:
+            groq_api_key (str): API key for authenticating with the Groq LLM service.
+            wix_client: Client instance for interacting with the Wix API.
+        
+        Raises:
+            Exception: If the Groq LLM fails to initialize.
+        """
         self.wix_client = wix_client
         self.memory = session_memory
         
@@ -35,7 +45,11 @@ class PureAIAgent:
         print("✅ Enhanced Pure AI Agent initialized with RENDERTYPE SUPPORT!")
     
     def _create_intent_analyzer(self):
-        """Enhanced AI that understands customer intent including advanced order queries"""
+        """
+        Creates an AI intent analyzer pipeline that interprets customer messages for an online clothing store, extracting the intended action, relevant parameters, confidence score, and reasoning.
+        
+        The analyzer supports advanced order-related queries, including single and multiple order checks, recent and last orders, orders by status, order statistics, product searches, and context/memory requests. It leverages conversation history to improve understanding and defaults to reasonable limits for ambiguous queries. The output is a structured JSON object specifying the recommended action and extracted details.
+        """
         
         system_prompt = """You are an AI assistant that analyzes customer messages for an online clothing store.
 
@@ -138,7 +152,11 @@ Analyze this customer message considering the conversation context above.""")
         return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """Enhanced AI response generator with renderType awareness"""
+        """
+        Creates a response generator pipeline that produces natural language replies for customer queries, with awareness of interactive UI elements (renderTypes) such as buttons and cards.
+        
+        The generated responses are tailored to the type of result (e.g., order status, product listings, memory queries) and explicitly mention available interactive elements when present. The pipeline uses a detailed system prompt to ensure responses are conversational, informative, and highlight interactive capabilities for enhanced customer engagement.
+        """
         
         system_prompt = """You are a customer service representative for an online clothing store.
 
@@ -248,7 +266,16 @@ Generate a response based on the information above.""")
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using enhanced AI intelligence with renderType support"""
+        """
+        Processes a customer message using AI-driven intent analysis, action execution, and natural language response generation with support for interactive UI elements.
+        
+        Parameters:
+            message (str): The customer's input message.
+            user_id (Optional[str]): Unique identifier for the user, used for conversation context and memory.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing the generated response text, AI confidence score, detected action, success status, reasoning, and metadata about interactive UI elements (renderTypes and interactive element count).
+        """
         try:
             print(f"🤖 Enhanced AI processing: {message} (user_id: {user_id})")
             
@@ -320,7 +347,18 @@ Generate a response based on the information above.""")
             return await self._handle_error_intelligently(message, str(e))
     
     async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the determined action using enhanced Wix API with renderType support"""
+        """
+        Executes the specified customer service action using the Wix API, supporting enhanced responses with renderType metadata for interactive UI elements.
+        
+        Handles actions related to memory/context, product listings, single and multiple order checks, recent and status-filtered orders, order statistics, and contextual help. For order and product queries, returns structured results including flags indicating the presence and count of interactive UI elements (renderTypes) when available. Returns error details and renderType metadata for invalid parameters, authentication failures, or API errors.
+        
+        Parameters:
+            action (str): The action to execute, such as order checks, product queries, or help requests.
+            params (Dict[str, Any]): Parameters required for the specified action, including user and order information.
+        
+        Returns:
+            Dict[str, Any]: A structured result containing action outcome, relevant data, and renderType metadata for UI interactivity.
+        """
         try:
             user_id = params.get("user_id")
             
@@ -683,7 +721,14 @@ Generate a response based on the information above.""")
             }
     
     async def _handle_memory_request(self, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-        """Handle requests about conversation history (unchanged)"""
+        """
+        Handles requests related to retrieving conversation history or memory for a specific user.
+        
+        Depending on the request type in `params`, returns the last user or bot message, a summary of recent conversation messages, a list of mentioned order IDs, or a general memory acknowledgment. If `user_id` is missing, returns an error. All responses include metadata indicating the absence of interactive UI elements.
+        
+        Returns:
+            A dictionary containing the memory response, request type, success status, and renderType metadata.
+        """
         if not user_id:
             return {
                 "success": False,
@@ -763,6 +808,21 @@ Generate a response based on the information above.""")
             }
     
     async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict[str, Any], was_successful: bool, conversation_context: str) -> str:
+        """
+        Generates a natural language response for the user, incorporating action results and interactive UI element metadata.
+        
+        This method formats order or product lists, includes information about interactive elements (renderTypes and button counts), and invokes the response generator to produce a user-facing reply. If response generation fails, it falls back to a default response.
+        
+        Parameters:
+            original_message (str): The user's original message.
+            action_taken (str): The action determined by intent analysis.
+            function_result (Dict[str, Any]): The result of the executed action, including renderType metadata.
+            was_successful (bool): Indicates if the action was successful.
+            conversation_context (str): The current conversation context.
+        
+        Returns:
+            str: The generated natural language response, mentioning interactive elements when present.
+        """
         try:
             result_type = function_result.get("type", "general")
             
@@ -855,7 +915,12 @@ Generate a response based on the information above.""")
             )
 
     async def _create_fallback_response(self, action: str, result: Dict[str, Any], original_message: str) -> str:
-        """Create fallback response when AI generation fails"""
+        """
+        Generate a simple fallback text response for a given action when AI-based response generation fails.
+        
+        Returns:
+            str: A fallback response message tailored to the action and result, including error messages or basic confirmations. Mentions interactive elements if present in the result.
+        """
         if not result.get("success", False):
             error = result.get("error", "Unknown error")
             return f"I encountered an issue: {error}. Please try again or contact support for assistance."
@@ -902,7 +967,15 @@ Generate a response based on the information above.""")
             return "I've processed your request! Is there anything else I can help you with?"
     
     async def _generate_contextual_help(self, topic: str) -> Dict[str, Any]:
-        """Generate help response based on topic (unchanged)"""
+        """
+        Generate a contextual help response for a given topic, including store policies, returns, shipping, or payment.
+        
+        Parameters:
+            topic (str): The help topic requested by the user.
+        
+        Returns:
+            dict: A dictionary containing the help response content, success status, response type, and renderType metadata.
+        """
         help_topics = {
             "general help": "I'm here to assist with shopping, order tracking, or store policies! What do you need help with? You can ask about new arrivals, specific products, or check an order status.",
             "returns": "Our return policy allows returns within 30 days of delivery. Items must be unworn and in original condition. Want to start a return or need more details?",
@@ -920,7 +993,12 @@ Generate a response based on the information above.""")
         }
     
     async def _handle_error_intelligently(self, message: str, error: str) -> Dict[str, Any]:
-        """Handle errors with AI-generated responses (unchanged)"""
+        """
+        Generates a polite, helpful error response using AI when an exception occurs during message processing.
+        
+        Returns:
+            dict: A dictionary containing the AI-generated error response, confidence score, action type, success status, reasoning, and renderType metadata indicating no interactive elements.
+        """
         error_prompt = ChatPromptTemplate.from_messages([
             ("system", "You are a customer service bot. An error occurred: {error}. Respond politely and helpfully, suggesting next steps."),
             ("human", "Customer message: {message}")
@@ -955,7 +1033,12 @@ Generate a response based on the information above.""")
             }
     
     def is_healthy(self) -> bool:
-        """Check if agent is healthy"""
+        """
+        Check whether the AI agent and its core components are properly initialized.
+        
+        Returns:
+            bool: True if the LLM, intent analyzer, and response generator are all initialized; False otherwise.
+        """
         try:
             return bool(self.llm and self.intent_analyzer and self.response_generator)
         except Exception:

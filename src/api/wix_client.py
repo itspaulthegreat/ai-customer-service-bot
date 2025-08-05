@@ -8,6 +8,14 @@ class WixAPIClient:
     """Enhanced client for interacting with Wix API endpoints with renderType support"""
     
     def __init__(self, base_url: str):
+        """
+        Initialize the WixAPIClient with the specified base URL, timeout, and enhanced API endpoints.
+        
+        Parameters:
+            base_url (str): The root URL for the Wix API, which will be normalized by removing any trailing slash.
+        
+        This constructor sets up product and order endpoints, including enhanced order management with renderType UI support.
+        """
         self.base_url = base_url.rstrip('/')
         self.timeout = aiohttp.ClientTimeout(total=30)
         
@@ -39,7 +47,15 @@ class WixAPIClient:
         print(f"🆕 RenderType support: Enhanced for interactive UI elements")
     
     def _get_headers(self, user_id: str = None) -> Dict[str, str]:
-        """Get headers for requests with enhanced bot identification"""
+        """
+        Constructs HTTP headers for API requests, including enhanced bot identification and optional user ID context.
+        
+        Parameters:
+            user_id (str, optional): The user ID to include in the headers for user-specific requests.
+        
+        Returns:
+            Dict[str, str]: A dictionary of HTTP headers for the request.
+        """
         headers = {
             'User-Agent': 'ai-customer-service-bot/4.0-rendertype',
             'X-Bot-Request': 'true',
@@ -58,7 +74,15 @@ class WixAPIClient:
     # ============== PRODUCT METHODS (Unchanged) ==============
     
     async def get_new_arrivals(self, limit: int = 8) -> Dict[str, Any]:
-        """Fetch new arrivals from Wix"""
+        """
+        Asynchronously fetches a list of new arrival products from the Wix API.
+        
+        Parameters:
+            limit (int): The maximum number of new arrival products to retrieve. Defaults to 8.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing the success status, a list of new arrival products under 'metric_value', and additional context or error information.
+        """
         try:
             print(f"📡 Fetching new arrivals (limit: {limit})")
 
@@ -100,7 +124,15 @@ class WixAPIClient:
             }
 
     async def get_mens_products(self, limit: int = 8) -> Dict[str, Any]:
-        """Fetch men's products from Wix"""
+        """
+        Fetches a list of men's products from the Wix API.
+        
+        Parameters:
+        	limit (int): The maximum number of products to retrieve. Defaults to 8.
+        
+        Returns:
+        	Dict[str, Any]: A dictionary containing the success status, a list of products under 'metric_value', and additional context or error information.
+        """
         try:
             print(f"👔 Fetching men's products (limit: {limit})")
 
@@ -222,6 +254,16 @@ class WixAPIClient:
     # ============== EXISTING ORDER METHODS (Enhanced) ==============
 
     async def get_order_items(self, order_id: str, user_id: str = None) -> Dict[str, Any]:
+        """
+        Retrieve the items for a specific order, optionally scoped to a user.
+        
+        Parameters:
+            order_id (str): The unique identifier of the order.
+            user_id (str, optional): The user ID to scope the request, if applicable.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing the success status, order items data if successful, or error details if the request fails.
+        """
         try:
             print(f"📋 Fetching order items for order: {order_id}, user: {user_id}")
             
@@ -369,7 +411,11 @@ class WixAPIClient:
     # ============== NEW: ENHANCED ORDER MANAGEMENT METHODS ==============
 
     async def get_multiple_order_status(self, order_ids: List[str], user_id: str = None) -> Dict[str, Any]:
-        """Check status of multiple orders at once - NEW"""
+        """
+        Check the status of multiple orders simultaneously.
+        
+        Validates the provided list of order IDs (must be non-empty and no more than 10). Returns a dictionary containing the success status, a list of order status metrics, and context information. If an error occurs, returns structured error details with appropriate error codes.
+        """
         try:
             print(f"🔍 Checking multiple order status: {order_ids}, user: {user_id}")
 
@@ -437,7 +483,17 @@ class WixAPIClient:
 
     # ENHANCED: Get last N orders with renderType support
     async def get_last_orders(self, user_id: str, count: int = 1, include_render_types: bool = True) -> Dict[str, Any]:
-        """Get user's last N orders with optional renderType support - ENHANCED"""
+        """
+        Retrieve the most recent orders for a user, optionally including renderType UI element data.
+        
+        Parameters:
+            user_id (str): The unique identifier of the user whose orders are to be retrieved.
+            count (int, optional): The number of recent orders to fetch (between 1 and 20). Defaults to 1.
+            include_render_types (bool, optional): Whether to include renderType UI element information in the response. Defaults to True.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing the success status, a list of order data (with optional renderType details), and context or error information.
+        """
         try:
             print(f"📋 Fetching last {count} orders for user: {user_id}, renderTypes: {include_render_types}")
 
@@ -511,7 +567,16 @@ class WixAPIClient:
             }
 
     async def get_recent_orders(self, user_id: str, days: int = 30) -> Dict[str, Any]:
-        """Get user's orders from last N days - NEW"""
+        """
+        Retrieve a user's orders placed within the last specified number of days.
+        
+        Parameters:
+            user_id (str): The unique identifier of the user whose recent orders are to be fetched.
+            days (int, optional): The number of days to look back for orders (must be between 1 and 365). Defaults to 30.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing the success status, a list of recent orders under 'metric_value', and additional context or error information.
+        """
         try:
             print(f"📅 Fetching orders from last {days} days for user: {user_id}")
 
@@ -576,7 +641,17 @@ class WixAPIClient:
             }
 
     async def get_orders_by_status(self, user_id: str, status: str, limit: int = 10) -> Dict[str, Any]:
-        """Get user's orders filtered by status - NEW"""
+        """
+        Retrieve a user's orders filtered by a specific status.
+        
+        Parameters:
+            user_id (str): The unique identifier of the user whose orders are to be retrieved.
+            status (str): The status to filter orders by (e.g., "PAID", "SHIPPED").
+            limit (int, optional): The maximum number of orders to return. Defaults to 10.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing the success status, a list of matching orders under 'metric_value', and additional context or error information.
+        """
         try:
             print(f"🏷️ Fetching orders with status '{status}' for user: {user_id}")
 
@@ -753,7 +828,12 @@ class WixAPIClient:
             }
     
     async def test_connection(self) -> bool:
-        """Test connection to Wix API - Enhanced with more comprehensive testing"""
+        """
+        Tests connectivity to the Wix API by performing a basic request to the new arrivals endpoint.
+        
+        Returns:
+            bool: True if the API is reachable and responsive, otherwise False.
+        """
         try:
             print("🔧 Testing enhanced Wix API connection...")
             
@@ -788,7 +868,9 @@ class WixAPIClient:
         return {k: v for k, v in self.endpoints.items() if 'order' in k.lower()}
 
     def get_enhanced_capabilities(self) -> List[str]:
-        """Get list of enhanced capabilities provided by this client"""
+        """
+        Return a list of enhanced features supported by this client, including advanced order management and renderType-based UI capabilities.
+        """
         return [
             "Multiple order status checking",
             "Last N orders retrieval", 
@@ -804,7 +886,12 @@ class WixAPIClient:
         ]
 
     async def health_check(self) -> Dict[str, Any]:
-        """Comprehensive health check of all systems"""
+        """
+        Performs a comprehensive health check of the Wix API client and its supported endpoints.
+        
+        Returns:
+            A dictionary containing overall health status, endpoint connectivity results, counts of available endpoints and enhanced features, supported renderType UI elements, and additional capability flags. If an error occurs, includes error details and base URL.
+        """
         try:
             print("🏥 Running comprehensive health check...")
             

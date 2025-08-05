@@ -6,7 +6,11 @@ import { syncSearchIndex } from 'backend/search';
 import { fetchNewArrivals, fetchMensProducts, fetchWomensProducts, fetchTopChoices } from 'backend/repeaterAPIendpoints/repeaterUtils.jsw';
 import { orderService } from 'backend/orderService.jsw';
 
-// Utility functions (unchanged)
+/**
+ * Extracts the user ID from the request headers or URL query parameters.
+ * @param {Object} request - The HTTP request object.
+ * @return {string|null} The extracted user ID, or null if not found.
+ */
 function extractUserId(request) {
     if (request.headers['x-user-id']) {
         return request.headers['x-user-id'];
@@ -15,6 +19,13 @@ function extractUserId(request) {
     return url.searchParams.get('userId') || url.searchParams.get('user_id');
 }
 
+/**
+ * Determines whether an incoming HTTP request is likely from a bot.
+ * 
+ * Checks for the presence of a specific header or common bot indicators in the user-agent string.
+ * @param {Object} request - The HTTP request object containing headers.
+ * @return {boolean} True if the request appears to be from a bot; otherwise, false.
+ */
 function isBotRequest(request) {
     const userAgent = request.headers['user-agent'] || '';
     return request.headers['x-bot-request'] === 'true' || 
@@ -22,6 +33,13 @@ function isBotRequest(request) {
            userAgent.toLowerCase().includes('ai-customer-service');
 }
 
+/**
+ * Parses an input parameter into an array of cleaned order ID strings.
+ * 
+ * Accepts a comma-separated string or an array, trims whitespace from each ID, and removes empty entries.
+ * @param {string|string[]} orderIdsParam - Comma-separated order IDs or an array of order ID strings.
+ * @return {string[]} An array of non-empty, trimmed order ID strings.
+ */
 function parseOrderIds(orderIdsParam) {
     if (!orderIdsParam) return [];
     if (typeof orderIdsParam === 'string') {
@@ -33,7 +51,11 @@ function parseOrderIds(orderIdsParam) {
     return [];
 }
 
-// Webhook & search endpoints (unchanged)
+/**
+ * Handles Razorpay webhook POST requests, verifying event authenticity and preventing duplicate processing.
+ *
+ * Parses the incoming webhook payload, checks for duplicate event IDs, verifies the payment signature, and stores valid events in the "WebhookEvents" collection. Returns a JSON response indicating whether the webhook was processed, already handled, or deferred due to errors.
+ */
 export async function post_razorpayWebhook(request) {
     const options = { headers: { 'Content-Type': 'application/json' } };
     try {
@@ -83,6 +105,10 @@ export async function post_razorpayWebhook(request) {
     }
 }
 
+/**
+ * Triggers synchronization of the search index and returns the result.
+ * @returns {Promise<object>} An object containing the result of the search index synchronization, or an error message if the operation fails.
+ */
 export async function post_syncSearchIndex(request) {
     try {
         const result = await syncSearchIndex();
@@ -93,7 +119,13 @@ export async function post_syncSearchIndex(request) {
     }
 }
 
-// Product endpoints (unchanged - keeping existing code)
+/**
+ * Handles HTTP requests to retrieve a list of new arrival products.
+ *
+ * Accepts an optional `limit` query parameter to specify the maximum number of products to return (default is 15).
+ * Responds with a JSON object containing the product list, success status, and contextual metadata.
+ * Returns a 400 Bad Request with error details if an error occurs during retrieval.
+ */
 export async function get_getNewArrivals(request) {
     try {
         const url = new URL(request.url);
@@ -131,6 +163,11 @@ export async function get_getNewArrivals(request) {
     }
 }
 
+/**
+ * Handles HTTP requests to retrieve men's products with an optional limit.
+ * 
+ * Parses the `limit` query parameter (defaulting to 15 if not provided), fetches the specified number of men's products, and returns them in a JSON response. On error, returns a 400 Bad Request with error details.
+ */
 export async function get_getMensProducts(request) {
     try {
         const url = new URL(request.url);
@@ -167,6 +204,11 @@ export async function get_getMensProducts(request) {
     }
 }
 
+/**
+ * Handles HTTP requests to retrieve a list of women's products with an optional limit.
+ * 
+ * Parses the `limit` query parameter (defaulting to 15 if not provided), fetches the specified number of women's products, and returns them in a structured JSON response. On error, returns a 400 Bad Request with error details.
+ */
 export async function get_getWomensProducts(request) {
     try {
         const url = new URL(request.url);
@@ -203,6 +245,14 @@ export async function get_getWomensProducts(request) {
     }
 }
 
+/**
+ * Handles product search requests with optional category filtering and result limiting.
+ *
+ * Extracts the search query, category, and limit from the request's query parameters. Searches the "allProducts" collection for products whose names contain the query string, optionally filtering by category. Returns a JSON response with a list of matching product summaries or an error if the query parameter is missing or a server error occurs.
+ *
+ * @param {Request} request - The HTTP request containing search parameters.
+ * @returns {Promise<Response>} A JSON response with the search results or an error message.
+ */
 export async function get_searchProducts(request) {
     try {
         const url = new URL(request.url);
@@ -290,6 +340,11 @@ export async function get_searchProducts(request) {
     }
 }
 
+/**
+ * Handles an HTTP request to retrieve detailed information for a single product by its ID.
+ *
+ * Validates the presence of the product ID in the query parameters, fetches the product from the "allProducts" collection, and returns a structured JSON response with product details. Responds with appropriate error messages if the product ID is missing or the product is not found.
+ */
 export async function get_getProduct(request) {
     try {
         const url = new URL(request.url);
@@ -373,7 +428,11 @@ export async function get_getProduct(request) {
     }
 }
 
-// Order endpoints (keeping existing ones, enhancing getLastOrders)
+/**
+ * Handles HTTP requests to retrieve items for a specific order.
+ *
+ * Validates the presence of the order ID in the request, extracts the user ID, and fetches order items using the order service. Returns a JSON response with the order items, contextual metadata (such as total items, status groups, and unique statuses), or an error message if the request is invalid or the service call fails.
+ */
 export async function get_getOrderItems(request) {
     try {
         const url = new URL(request.url);
@@ -452,6 +511,11 @@ export async function get_getOrderItems(request) {
     }
 }
 
+/**
+ * Handles HTTP requests to retrieve a summary of a specific order for a user.
+ *
+ * Validates the presence of the `orderId` query parameter and extracts the user ID from the request. Calls the order service to obtain the order summary, including item count, status details, and mixed status flag. Returns a structured JSON response with success status, summary data, and contextual metadata. Responds with a 400 Bad Request if required parameters are missing or if the service call fails.
+ */
 export async function get_getOrderSummary(request) {
     try {
         const url = new URL(request.url);
@@ -529,6 +593,11 @@ export async function get_getOrderSummary(request) {
     }
 }
 
+/**
+ * Handles an HTTP request to retrieve a paginated list of orders for a user, with optional inclusion of order items.
+ *
+ * Extracts the user ID from the request and supports pagination via `limit` and `offset` query parameters. The `includeItems` parameter controls whether order items are included in the response. Returns a structured JSON response with order data, pagination context, and error details if applicable.
+ */
 export async function get_getUserOrders(request) {
     try {
         const url = new URL(request.url);
@@ -616,6 +685,11 @@ export async function get_getUserOrders(request) {
     }
 }
 
+/**
+ * Retrieves the statuses of multiple orders for a user based on provided order IDs.
+ *
+ * Validates the presence and correctness of the `orderIds` query parameter, extracts the user ID, and calls the order service to fetch status information for each order. Returns a structured JSON response with status details, including lists of requested, successful, and failed orders, as well as a summary. Responds with an error if parameters are missing, invalid, or if the service call fails.
+ */
 export async function get_getMultipleOrderStatus(request) {
     try {
         const url = new URL(request.url);
@@ -712,7 +786,11 @@ export async function get_getMultipleOrderStatus(request) {
     }
 }
 
-// ENHANCED: getLastOrders with renderType support
+/**
+ * Retrieves the most recent orders for a user, with optional inclusion of render type information.
+ *
+ * Extracts the user ID from the request and returns up to a specified number of the user's latest orders (default 1, maximum 20). The response can include render type details if requested (enabled by default). Returns a structured JSON response with order data and contextual metadata. Responds with an error if the user ID is missing, the count is out of range, or if an internal error occurs.
+ */
 export async function get_getLastOrders(request) {
     try {
         const url = new URL(request.url);
@@ -817,7 +895,11 @@ export async function get_getLastOrders(request) {
     }
 }
 
-// Keep all other existing endpoints unchanged
+/**
+ * Handles HTTP requests to retrieve a user's recent orders within a specified number of days.
+ *
+ * Validates the presence of a user ID and ensures the days parameter is within the allowed range (1–365). Returns a JSON response containing the user's recent orders, total order count, and date range context. Responds with an error if parameters are missing or invalid, or if the order retrieval fails.
+ */
 export async function get_getRecentOrders(request) {
     try {
         const url = new URL(request.url);
@@ -912,6 +994,11 @@ export async function get_getRecentOrders(request) {
     }
 }
 
+/**
+ * Retrieves orders for a user filtered by a specific status.
+ *
+ * Extracts the user ID and status from the request query parameters, validates their presence, and fetches orders matching the status for the user. Supports an optional limit on the number of results (default 10). Returns a structured JSON response with the filtered orders and contextual metadata, or an error response if validation fails or the service encounters an error.
+ */
 export async function get_getOrdersByStatus(request) {
     try {
         const url = new URL(request.url);
@@ -1006,6 +1093,13 @@ export async function get_getOrdersByStatus(request) {
     }
 }
 
+/**
+ * Handles an HTTP request to retrieve aggregated order statistics for a user.
+ * 
+ * Validates the presence of a user ID in the request, calls the order service to obtain order statistics, and returns a structured JSON response with the results or error details.
+ * 
+ * @returns {Promise<Response>} A JSON response containing user order statistics and context, or an error message if the request is invalid or the service fails.
+ */
 export async function get_getUserOrderStats(request) {
     try {
         const url = new URL(request.url);
@@ -1076,6 +1170,12 @@ export async function get_getUserOrderStats(request) {
     }
 }
 
+/**
+ * Retrieves the status summary for a specific order by order ID and user ID.
+ *
+ * Validates the presence of the order ID, fetches the order summary using the backend order service, and returns structured JSON containing order status, total, creation date, estimated delivery, status details, and mixed status flag. Returns an error response if the order ID is missing, the order is not found, or an exception occurs.
+ * @returns {Promise<Object>} JSON response with order status information or error details.
+ */
 export async function get_getOrderStatus(request) {
     try {
         const url = new URL(request.url);
