@@ -172,6 +172,109 @@
             border: 1px solid #e5e5e5;
         }
 
+        /* NEW: RenderType Styles */
+        .render-container {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .render-item {
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .render-item.order-summary {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            font-weight: 500;
+        }
+
+        .render-item.order-item {
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            color: #666666;
+        }
+
+        .render-item.button {
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .render-item.button:hover {
+            background: #f6f8fa;
+            border-color: #8c959f;
+            transform: translateY(-1px);
+        }
+
+        .render-item.button:active {
+            transform: translateY(0);
+        }
+
+        /* Button type specific styles */
+        .render-item.button.status {
+            border-left: 3px solid #0969da;
+        }
+
+        .render-item.button.action {
+            border-left: 3px solid #1f883d;
+        }
+
+        .render-item.button.info {
+            border-left: 3px solid #9a6700;
+            cursor: default;
+        }
+
+        .render-item.button.info:hover {
+            transform: none;
+            background: #ffffff;
+        }
+
+        /* Status-specific styles */
+        .render-item.status-pending { border-left-color: #d1242f; }
+        .render-item.status-processing { border-left-color: #bf8700; }
+        .render-item.status-shipped { border-left-color: #0969da; }
+        .render-item.status-delivered { border-left-color: #1f883d; }
+        .render-item.status-cancelled { border-left-color: #656d76; }
+        .render-item.status-partial { border-left-color: #9a6700; }
+
+        .render-icon {
+            font-size: 14px;
+            min-width: 16px;
+        }
+
+        .render-text {
+            flex: 1;
+        }
+
+        .render-badge {
+            background: #f6f8fa;
+            color: #656d76;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        .interactive-indicator {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 500;
+            margin-top: 8px;
+            display: inline-block;
+        }
+
         .typing-indicator {
             display: none;
             align-items: center;
@@ -372,6 +475,15 @@
                 width: 180px;
                 text-align: center;
             }
+
+            .render-container {
+                gap: 6px;
+            }
+
+            .render-item {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
         }
     </style>
 </head>
@@ -403,8 +515,8 @@
                 <h2>How can I help you today?</h2>
                 <p>I can help you with order status, product information, returns, and more.</p>
                 <div class="welcome-suggestions">
-                    <div class="welcome-chip" onclick="sendQuickMessage('Check my order status')">
-                        Check order status
+                    <div class="welcome-chip" onclick="sendQuickMessage('Check my last order')">
+                        Check last order
                     </div>
                     <div class="welcome-chip" onclick="sendQuickMessage('Show me new arrivals')">
                         New arrivals
@@ -412,8 +524,8 @@
                     <div class="welcome-chip" onclick="sendQuickMessage('Help with returns')">
                         Returns & exchanges
                     </div>
-                    <div class="welcome-chip" onclick="sendQuickMessage('Product information')">
-                        Product info
+                    <div class="welcome-chip" onclick="sendQuickMessage('My last 3 orders')">
+                        Recent orders
                     </div>
                 </div>
             </div>
@@ -448,178 +560,359 @@
         </div>
     </div>
 
-     <script>
-    // 👇 Hardcoded test user
-    const currentUser = {
-      userId: '43d05878-3efc-4bd3-bb45-051a79af8897',
-      email: '43d05878-3efc-4bd3-bb45-051a79af8898',
-      nickname: 'Local Tester',
-      sessionId: 'local-session-001'
-    };
+    <script>
+        // 👇 Hardcoded test user
+        const currentUser = {
+            userId: '43d05878-3efc-4bd3-bb45-051a79af8898',
+            email: '43d05878-3efc-4bd3-bb45-051a79af8898',
+            nickname: 'Local Tester',
+            sessionId: 'local-session-001'
+        };
 
-    const API_BASE = 'http://localhost:8000'; // 👈 Local API server
+        const API_BASE = 'http://localhost:8000'; // 👈 Local API server
 
-    let isConnected = false;
-    let messageCount = 0;
+        let isConnected = false;
+        let messageCount = 0;
 
-    function setupInputHandlers() {
-      const chatInput = document.getElementById('chatInput');
-      chatInput.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 100) + 'px';
-      });
-      chatInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
+        function setupInputHandlers() {
+            const chatInput = document.getElementById('chatInput');
+            chatInput.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+            });
+            chatInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            chatInput.focus();
         }
-      });
-      chatInput.focus();
-    }
 
-    async function checkStatus() {
-      try {
-        const res = await fetch(`${API_BASE}/health`);
-        if (res.ok) {
-          isConnected = true;
-          document.getElementById('statusDot').style.background = '#22c55e';
-          document.getElementById('statusText').textContent = 'Online';
-        } else {
-          throw new Error('Health check failed');
-        }
-      } catch (e) {
-        document.getElementById('statusDot').style.background = '#ef4444';
-        document.getElementById('statusText').textContent = 'Offline';
-        isConnected = false;
-        showError('Bot is offline. Please try again later.');
-      }
-    }
-
-    async function sendMessage() {
-      const input = document.getElementById('chatInput');
-      const message = input.value.trim();
-      if (!message || !isConnected) return;
-
-      input.value = '';
-      input.style.height = 'auto';
-      const sendBtn = document.getElementById('sendButton');
-      sendBtn.disabled = true;
-
-      if (messageCount === 0) {
-        const welcome = document.querySelector('.welcome-message');
-        if (welcome) welcome.remove();
-      }
-
-      addMessage(message, 'user');
-      showTyping(true);
-
-      try {
-        const res = await fetch(`${API_BASE}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': currentUser.userId,
-            'x-user-email': currentUser.email,
-            'x-wix-request': 'true'
-          },
-          body: JSON.stringify({
-            message,
-            user_id: currentUser.userId,
-            userEmail: currentUser.email,
-            context: {
-              isWixUser: false,
-              sessionId: currentUser.sessionId
+        async function checkStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                if (res.ok) {
+                    const data = await res.json();
+                    isConnected = true;
+                    document.getElementById('statusDot').style.background = '#22c55e';
+                    document.getElementById('statusText').textContent = 'Online';
+                    
+                    // Check for renderType support
+                    if (data.rendertype_support?.enabled) {
+                        console.log('🎨 RenderType support detected:', data.rendertype_support);
+                    }
+                } else {
+                    throw new Error('Health check failed');
+                }
+            } catch (e) {
+                document.getElementById('statusDot').style.background = '#ef4444';
+                document.getElementById('statusText').textContent = 'Offline';
+                isConnected = false;
+                showError('Bot is offline. Please try again later.');
             }
-          })
-        });
-
-        const data = await res.json();
-        if (res.ok) {
-          addMessage(data.response || data.message || 'Okay!', 'bot');
-        } else {
-          throw new Error(data.detail || data.error || 'Unknown error');
         }
-      } catch (err) {
-        addMessage('Oops! Something went wrong.', 'bot');
-        showError(`Error: ${err.message}`);
-      } finally {
-        showTyping(false);
-        sendBtn.disabled = false;
-        input.focus();
-        messageCount++;
-      }
-    }
 
-    function sendQuickMessage(msg) {
-      document.getElementById('chatInput').value = msg;
-      sendMessage();
-    }
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message || !isConnected) return;
 
-    function addMessage(content, sender) {
-      const chat = document.getElementById('chatMessages');
-      const msgGroup = document.createElement('div');
-      msgGroup.className = 'message-group';
+            input.value = '';
+            input.style.height = 'auto';
+            const sendBtn = document.getElementById('sendButton');
+            sendBtn.disabled = true;
 
-      const msgDiv = document.createElement('div');
-      msgDiv.className = `message ${sender}`;
+            if (messageCount === 0) {
+                const welcome = document.querySelector('.welcome-message');
+                if (welcome) welcome.remove();
+            }
 
-      if (sender === 'bot') {
-        const avatar = document.createElement('div');
-        avatar.className = 'message-avatar bot-avatar-small';
-        avatar.textContent = 'AI';
-        msgDiv.appendChild(avatar);
-      }
+            addMessage(message, 'user');
+            showTyping(true);
 
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'message-content';
-      contentDiv.textContent = content;
+            try {
+                const res = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': currentUser.userId,
+                        'x-user-email': currentUser.email,
+                        'x-wix-request': 'true'
+                    },
+                    body: JSON.stringify({
+                        message,
+                        user_id: currentUser.userId,
+                        userEmail: currentUser.email,
+                        context: {
+                            isWixUser: false,
+                            sessionId: currentUser.sessionId
+                        }
+                    })
+                });
 
-      msgDiv.appendChild(contentDiv);
+                const data = await res.json();
+                if (res.ok) {
+                    addMessage(data.response || data.message || 'Okay!', 'bot', data);
+                } else {
+                    throw new Error(data.detail || data.error || 'Unknown error');
+                }
+            } catch (err) {
+                addMessage('Oops! Something went wrong.', 'bot');
+                showError(`Error: ${err.message}`);
+            } finally {
+                showTyping(false);
+                sendBtn.disabled = false;
+                input.focus();
+                messageCount++;
+            }
+        }
 
-      if (sender === 'user') {
-        const avatar = document.createElement('div');
-        avatar.className = 'message-avatar user-avatar-small';
-        avatar.textContent = (currentUser.nickname || 'U')[0].toUpperCase();
-        msgDiv.appendChild(avatar);
-      }
+        function sendQuickMessage(msg) {
+            document.getElementById('chatInput').value = msg;
+            sendMessage();
+        }
 
-      msgGroup.appendChild(msgDiv);
-      chat.appendChild(msgGroup);
-      chat.scrollTop = chat.scrollHeight;
-    }
+        // ENHANCED: addMessage function with renderType support
+        function addMessage(content, sender, responseData = null) {
+            const chat = document.getElementById('chatMessages');
+            const msgGroup = document.createElement('div');
+            msgGroup.className = 'message-group';
 
-    function showTyping(show) {
-      const indicator = document.getElementById('typingIndicator');
-      indicator.style.display = show ? 'flex' : 'none';
-      if (show) {
-        document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-      }
-    }
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${sender}`;
 
-    function showError(msg) {
-      const existing = document.querySelector('.error-message');
-      if (existing) existing.remove();
+            if (sender === 'bot') {
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar bot-avatar-small';
+                avatar.textContent = 'AI';
+                msgDiv.appendChild(avatar);
+            }
 
-      const errDiv = document.createElement('div');
-      errDiv.className = 'error-message';
-      errDiv.textContent = msg;
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
 
-      const chat = document.getElementById('chatMessages');
-      chat.appendChild(errDiv);
+            msgDiv.appendChild(contentDiv);
 
-      setTimeout(() => {
-        if (errDiv.parentNode) errDiv.remove();
-      }, 5000);
-    }
+            if (sender === 'user') {
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar user-avatar-small';
+                avatar.textContent = (currentUser.nickname || 'U')[0].toUpperCase();
+                msgDiv.appendChild(avatar);
+            }
 
-    function initializeChat() {
-      console.log('👤 Local user:', currentUser);
-      document.getElementById('userName').textContent = `Hi, ${currentUser.nickname}!`;
-      setupInputHandlers();
-      checkStatus();
-    }
+            msgGroup.appendChild(msgDiv);
 
-    window.addEventListener('load', initializeChat);
-  </script>
+            // NEW: Add renderType elements for bot messages
+            if (sender === 'bot' && responseData) {
+                const renderContainer = createRenderElements(responseData);
+                if (renderContainer) {
+                    msgGroup.appendChild(renderContainer);
+                }
+            }
+
+            chat.appendChild(msgGroup);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // NEW: Create render elements based on response data
+        function createRenderElements(responseData) {
+            // For now, let's simulate renderType data since the backend integration might need more work
+            // In a real implementation, this would come from the API response
+            if (responseData.renderTypes || responseData.interactive_elements > 0) {
+                const container = document.createElement('div');
+                container.className = 'render-container';
+
+                // Show interactive indicator
+                const indicator = document.createElement('div');
+                indicator.className = 'interactive-indicator';
+                indicator.textContent = `🔘 ${responseData.interactive_elements || 'Interactive'} elements available`;
+                container.appendChild(indicator);
+
+                return container;
+            }
+
+            // Example renderType simulation for demonstration
+            if (responseData.action === 'get_last_orders' && responseData.success) {
+                const container = document.createElement('div');
+                container.className = 'render-container';
+
+                // Simulate order summary render item
+                const orderSummary = createRenderItem({
+                    renderType: 'order_summary',
+                    displayText: 'Order #ABC123',
+                    status: 'Delivered',
+                    icon: '📦'
+                });
+                container.appendChild(orderSummary);
+
+                // Simulate status button
+                const statusButton = createRenderItem({
+                    renderType: 'button',
+                    buttonType: 'status',
+                    displayText: 'Delivered',
+                    className: 'status-delivered',
+                    icon: '✅',
+                    clickable: true,
+                    action: 'view_order_details'
+                });
+                container.appendChild(statusButton);
+
+                // Simulate action buttons
+                const trackButton = createRenderItem({
+                    renderType: 'button',
+                    buttonType: 'action',
+                    displayText: 'Track Order',
+                    className: 'btn-track',
+                    icon: '📦',
+                    clickable: true,
+                    action: 'track_order'
+                });
+                container.appendChild(trackButton);
+
+                const reviewButton = createRenderItem({
+                    renderType: 'button',
+                    buttonType: 'action',
+                    displayText: 'Leave Review',
+                    className: 'btn-review',
+                    icon: '⭐',
+                    clickable: true,
+                    action: 'leave_review'
+                });
+                container.appendChild(reviewButton);
+
+                return container;
+            }
+
+            return null;
+        }
+
+        // NEW: Create individual render items
+        function createRenderItem(itemData) {
+            const item = document.createElement('div');
+            item.className = `render-item ${itemData.renderType}`;
+            
+            if (itemData.buttonType) {
+                item.classList.add(itemData.buttonType);
+            }
+            
+            if (itemData.className) {
+                item.classList.add(itemData.className);
+            }
+
+            // Add icon
+            if (itemData.icon) {
+                const icon = document.createElement('span');
+                icon.className = 'render-icon';
+                icon.textContent = itemData.icon;
+                item.appendChild(icon);
+            }
+
+            // Add text
+            const text = document.createElement('span');
+            text.className = 'render-text';
+            text.textContent = itemData.displayText;
+            item.appendChild(text);
+
+            // Add badge if needed
+            if (itemData.status && itemData.renderType === 'order_summary') {
+                const badge = document.createElement('span');
+                badge.className = 'render-badge';
+                badge.textContent = itemData.status;
+                item.appendChild(badge);
+            }
+
+            // Add click handler for buttons
+            if (itemData.clickable && itemData.action) {
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', () => handleRenderAction(itemData.action, itemData));
+            }
+
+            return item;
+        }
+
+        // NEW: Handle render action clicks
+        function handleRenderAction(action, itemData) {
+            console.log('🔘 Render action clicked:', action, itemData);
+            
+            // For now, just show a message about what would happen
+            const actionMessages = {
+                'view_order_details': `Would show details for ${itemData.orderId || 'this order'}`,
+                'track_order': `Would open tracking for ${itemData.orderId || 'this order'}`,
+                'leave_review': `Would open review form for ${itemData.orderId || 'this order'}`,
+                'cancel_order': `Would cancel ${itemData.orderId || 'this order'}`,
+                'initiate_return': `Would start return process for ${itemData.orderId || 'this order'}`
+            };
+
+            const message = actionMessages[action] || `Would execute action: ${action}`;
+            
+            // Add a small notification
+            showTemporaryNotification(message);
+        }
+
+        // NEW: Show temporary notification
+        function showTemporaryNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #f6f8fa;
+                border: 1px solid #d0d7de;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 12px;
+                color: #656d76;
+                z-index: 1000;
+                transition: all 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2000);
+        }
+
+        function showTyping(show) {
+            const indicator = document.getElementById('typingIndicator');
+            indicator.style.display = show ? 'flex' : 'none';
+            if (show) {
+                document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+            }
+        }
+
+        function showError(msg) {
+            const existing = document.querySelector('.error-message');
+            if (existing) existing.remove();
+
+            const errDiv = document.createElement('div');
+            errDiv.className = 'error-message';
+            errDiv.textContent = msg;
+
+            const chat = document.getElementById('chatMessages');
+            chat.appendChild(errDiv);
+
+            setTimeout(() => {
+                if (errDiv.parentNode) errDiv.remove();
+            }, 5000);
+        }
+
+        function initializeChat() {
+            console.log('👤 Local user:', currentUser);
+            console.log('🎨 RenderType support: Enabled');
+            document.getElementById('userName').textContent = `Hi, ${currentUser.nickname}!`;
+            setupInputHandlers();
+            checkStatus();
+        }
+
+        window.addEventListener('load', initializeChat);
+    </script>
 </body>
 </html>

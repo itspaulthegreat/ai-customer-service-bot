@@ -1,11 +1,11 @@
-# src/api/wix_client.py - ENHANCED VERSION WITH NEW ORDER ENDPOINTS
+# src/api/wix_client.py - ENHANCED VERSION WITH RENDER TYPE SUPPORT
 import aiohttp
 import asyncio
 from typing import Dict, List, Any, Optional
 import json
 
 class WixAPIClient:
-    """Enhanced client for interacting with Wix API endpoints with advanced order management"""
+    """Enhanced client for interacting with Wix API endpoints with renderType support"""
     
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip('/')
@@ -26,7 +26,7 @@ class WixAPIClient:
             "user_orders": f"{self.base_url}/_functions/getUserOrders",
             "order_status": f"{self.base_url}/_functions/getOrderStatus",  # Legacy
             
-            # NEW: Enhanced order endpoints
+            # ENHANCED: Order endpoints with renderType support
             "multiple_order_status": f"{self.base_url}/_functions/getMultipleOrderStatus",
             "last_orders": f"{self.base_url}/_functions/getLastOrders",
             "recent_orders": f"{self.base_url}/_functions/getRecentOrders",
@@ -36,16 +36,16 @@ class WixAPIClient:
         
         print(f"🔗 Enhanced WixAPIClient initialized with base URL: {self.base_url}")
         print(f"📋 Available endpoints: {len(self.endpoints)} total")
-        print(f"🆕 New order endpoints: multiple_order_status, last_orders, recent_orders, orders_by_status, user_order_stats")
+        print(f"🆕 RenderType support: Enhanced for interactive UI elements")
     
     def _get_headers(self, user_id: str = None) -> Dict[str, str]:
         """Get headers for requests with enhanced bot identification"""
         headers = {
-            'User-Agent': 'ai-customer-service-bot/4.0-enhanced',
+            'User-Agent': 'ai-customer-service-bot/4.0-rendertype',
             'X-Bot-Request': 'true',
             'Content-Type': 'application/json',
             'X-Bot-Version': '4.0',
-            'X-Feature-Set': 'enhanced-order-management'
+            'X-Feature-Set': 'enhanced-order-management-rendertype'
         }
         
         # Add user ID to headers when available
@@ -98,6 +98,7 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR",
                 "context": {"type": "new_arrivals"}
             }
+
     async def get_mens_products(self, limit: int = 8) -> Dict[str, Any]:
         """Fetch men's products from Wix"""
         try:
@@ -239,7 +240,6 @@ class WixAPIClient:
                     
                     if response.status == 200:
                         data = await response.json()
-                        print(f"✅ Raw response: {data}") # Add this log to inspect the response
                         print(f"✅ Retrieved order items for order: {order_id}")
                         return {
                             "success": True,
@@ -435,10 +435,11 @@ class WixAPIClient:
                 "context": {"type": "multiple_order_status", "orderIds": order_ids}
             }
 
-    async def get_last_orders(self, user_id: str, count: int = 1) -> Dict[str, Any]:
-        """Get user's last N orders - NEW"""
+    # ENHANCED: Get last N orders with renderType support
+    async def get_last_orders(self, user_id: str, count: int = 1, include_render_types: bool = True) -> Dict[str, Any]:
+        """Get user's last N orders with optional renderType support - ENHANCED"""
         try:
-            print(f"📋 Fetching last {count} orders for user: {user_id}")
+            print(f"📋 Fetching last {count} orders for user: {user_id}, renderTypes: {include_render_types}")
 
             if not user_id:
                 return {
@@ -460,7 +461,8 @@ class WixAPIClient:
 
             params = {
                 "userId": user_id,
-                "count": count
+                "count": count,
+                "includeRenderTypes": str(include_render_types).lower()
             }
             headers = self._get_headers(user_id)
 
@@ -473,7 +475,15 @@ class WixAPIClient:
 
                     if response.status == 200:
                         data = await response.json()
-                        print(f"✅ Retrieved last {count} orders")
+                        print(f"✅ Retrieved last {count} orders with renderTypes: {include_render_types}")
+                        
+                        # Log renderType information for debugging
+                        orders = data.get("metric_value", [])
+                        for order in orders:
+                            if "renderItems" in order:
+                                render_types = [item.get("renderType", "none") for item in order["renderItems"]]
+                                print(f"🎨 Order {order.get('_id', 'unknown')} has renderTypes: {render_types}")
+                        
                         return {
                             "success": data.get("success", False),
                             "metric_value": data.get("metric_value", []),
@@ -499,6 +509,7 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR",
                 "context": {"type": "last_orders", "userId": user_id}
             }
+
     async def get_recent_orders(self, user_id: str, days: int = 30) -> Dict[str, Any]:
         """Get user's orders from last N days - NEW"""
         try:
@@ -563,6 +574,7 @@ class WixAPIClient:
                 "code": "NETWORK_ERROR",
                 "context": {"type": "recent_orders", "userId": user_id}
             }
+
     async def get_orders_by_status(self, user_id: str, status: str, limit: int = 10) -> Dict[str, Any]:
         """Get user's orders filtered by status - NEW"""
         try:
@@ -759,6 +771,7 @@ class WixAPIClient:
                     if success:
                         print(f"🆕 Enhanced order endpoints available: {len([k for k in self.endpoints.keys() if 'order' in k])}")
                         print(f"🎯 Total API endpoints: {len(self.endpoints)}")
+                        print(f"🎨 RenderType support: Enabled")
                     
                     return success
                     
@@ -784,7 +797,10 @@ class WixAPIClient:
             "Comprehensive order statistics",
             "Enhanced error handling",
             "User context preservation",
-            "Bot request identification"
+            "Bot request identification",
+            "RenderType support for interactive UI",
+            "Dynamic button generation",
+            "Action-based UI elements"
         ]
 
     async def health_check(self) -> Dict[str, Any]:
@@ -819,7 +835,15 @@ class WixAPIClient:
                 "enhanced_features": len(self.get_enhanced_capabilities()),
                 "endpoint_tests": endpoint_tests,
                 "enhanced_version": "4.0",
-                "capabilities": self.get_enhanced_capabilities()
+                "capabilities": self.get_enhanced_capabilities(),
+                "rendertype_support": {
+                    "enabled": True,
+                    "supported_types": ["button", "order_summary", "order_item", "status", "action", "info"],
+                    "interactive_elements": True,
+                    "dynamic_ui": True
+                },
+                "no_regex": True,
+                "no_patterns": True
             }
             
         except Exception as e:

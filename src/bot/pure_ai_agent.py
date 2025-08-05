@@ -1,4 +1,4 @@
-# src/bot/pure_ai_agent.py - ENHANCED VERSION WITH NEW ORDER CAPABILITIES
+# src/bot/pure_ai_agent.py - ENHANCED VERSION WITH RENDER TYPE SUPPORT
 import asyncio
 import json
 import re
@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from .session_memory import session_memory
 
 class PureAIAgent:
-    """Enhanced Pure AI-driven customer service agent with advanced order management"""
+    """Enhanced Pure AI-driven customer service agent with renderType support"""
     
     def __init__(self, groq_api_key: str, wix_client):
         self.wix_client = wix_client
@@ -32,7 +32,7 @@ class PureAIAgent:
         self.intent_analyzer = self._create_intent_analyzer()
         self.response_generator = self._create_response_generator()
         
-        print("✅ Enhanced Pure AI Agent initialized with ADVANCED ORDER MANAGEMENT!")
+        print("✅ Enhanced Pure AI Agent initialized with RENDERTYPE SUPPORT!")
     
     def _create_intent_analyzer(self):
         """Enhanced AI that understands customer intent including advanced order queries"""
@@ -138,25 +138,34 @@ Analyze this customer message considering the conversation context above.""")
         return prompt | self.llm | JsonOutputParser()
     
     def _create_response_generator(self):
-        """Enhanced AI response generator for all order types"""
+        """Enhanced AI response generator with renderType awareness"""
         
         system_prompt = """You are a customer service representative for an online clothing store.
 
-Handle different types of responses based on the result type:
+Handle different types of responses based on the result type. You now have access to INTERACTIVE UI ELEMENTS through renderTypes!
 
-**1. Single Order Status (type = "order_status")**:
+**RENDERTYPE SYSTEM:**
+When orders have "renderItems", these are interactive UI elements that will be displayed as buttons, cards, or other interactive components. Each renderItem has:
+- renderType: "button", "order_summary", "order_item", etc.
+- displayText: What shows on the button/element
+- action: What happens when clicked (track_order, leave_review, cancel_order, etc.)
+- className: CSS styling class
+- icon: Emoji or icon to display
+
+**1. Last Orders with RenderTypes (type = "last_orders")**:
+- If orders have "renderItems": "Here are your last [count] orders with interactive options:"
+- Mention that they can click buttons to take actions
+- Example: "✅ Order ABC123 - Jan 15 - Delivered (Click 'Track Order' or 'Leave Review')"
+
+**2. Single Order Status (type = "order_status")**:
 - If SUCCESS = TRUE: "Great! I found your order [order_id] with [total_items] items. [List items with status]"
 - If SUCCESS = FALSE: "Sorry, I couldn't find order [order_id]. [Helpful error message based on error code]"
 
-**2. Multiple Order Status (type = "multiple_order_status")**:
+**3. Multiple Order Status (type = "multiple_order_status")**:
 - If SUCCESS = TRUE: "I checked [requested_count] orders. [successful_count] found, [failed_count] not found."
 - List successful orders with status
 - List failed orders with reasons
 - Example: "✅ order_123: Shipped (2 items)\n❌ order_456: Not found"
-
-**3. Last Orders (type = "last_orders")**:
-- If SUCCESS = TRUE: "Here are your last [count] orders:" + list with dates and status
-- Example: "Your last 3 orders:\n• Order ABC123 - Jan 15 - Delivered\n• Order XYZ789 - Jan 10 - Shipped"
 
 **4. Recent Orders (type = "recent_orders")**:
 - If SUCCESS = TRUE: "You have [total_orders] orders from the last [days] days:" + list
@@ -178,19 +187,26 @@ Handle different types of responses based on the result type:
 - Return requested information from conversation history
 - Be helpful and direct
 
+**INTERACTIVE BUTTON MENTIONS:**
+When orders have renderItems with renderType="button", mention the interactive capabilities:
+- "Click the status button to see details"
+- "Use the action buttons to track, review, or return items"
+- "Interactive buttons are available for quick actions"
+
 **General Guidelines:**:
-- Use emojis appropriately (🛍️ 📦 ✅ ❌ 📊)
+- Use emojis appropriately (🛍️ 📦 ✅ ❌ 📊 🔘)
 - Be conversational and helpful
 - For multi-item responses, use clear formatting (bullet points, numbering)
 - Always provide context about what you're showing
 - If there are errors, be helpful and suggest next steps
 - Keep responses concise but informative
 - When showing multiple orders, include key info: Order ID, Date, Status, Total (if available)
+- **NEW**: Mention interactive elements when available
 
 Response Format Examples:
-- "✅ Order ABC123 (Jan 15) - Delivered - $45.99"
-- "📦 Order XYZ789 (Jan 10) - Shipped - 3 items"
-- "⏳ Order DEF456 (Jan 08) - Processing - $123.50"
+- "✅ Order ABC123 (Jan 15) - Delivered - $45.99 🔘 [Interactive buttons available]"
+- "📦 Order XYZ789 (Jan 10) - Shipped - 3 items 🔘 [Click to track or get details]"
+- "⏳ Order DEF456 (Jan 08) - Processing - $123.50 🔘 [Cancel option available]"
 
 Data Available:
 - Order ID: {order_id}
@@ -200,7 +216,9 @@ Data Available:
 - Orders List: {orders_list}
 - Statistics: {statistics}
 - Error: {error}
-- Context: {context}"""
+- Context: {context}
+- RenderTypes Available: {has_render_types}
+- Interactive Elements: {interactive_count}"""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -221,6 +239,8 @@ Result Details:
 - Error: {error}
 - Context: {context}
 - Memory Content: {memory_content}
+- RenderTypes Available: {has_render_types}
+- Interactive Elements Count: {interactive_count}
 
 Generate a response based on the information above.""")
         ])
@@ -228,7 +248,7 @@ Generate a response based on the information above.""")
         return prompt | self.llm
     
     async def process_message(self, message: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process customer message using enhanced AI intelligence"""
+        """Process customer message using enhanced AI intelligence with renderType support"""
         try:
             print(f"🤖 Enhanced AI processing: {message} (user_id: {user_id})")
             
@@ -264,7 +284,7 @@ Generate a response based on the information above.""")
             
             print(f"🔧 Action '{action}' executed: {action_result.get('success', False)}")
             
-            # Step 3: Generate natural customer response
+            # Step 3: Generate natural customer response with renderType awareness
             was_successful = action_result.get("success", True)
             print(f"🤖 Telling AI that success = {was_successful}")
             
@@ -287,7 +307,9 @@ Generate a response based on the information above.""")
                 "confidence": confidence,
                 "action": action,
                 "success": action_result.get("success", True),
-                "reasoning": reasoning
+                "reasoning": reasoning,
+                "renderTypes": action_result.get("has_render_types", False),
+                "interactive_elements": action_result.get("interactive_count", 0)
             }
             
         except Exception as e:
@@ -298,7 +320,7 @@ Generate a response based on the information above.""")
             return await self._handle_error_intelligently(message, str(e))
     
     async def _execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the determined action using enhanced Wix API"""
+        """Execute the determined action using enhanced Wix API with renderType support"""
         try:
             user_id = params.get("user_id")
             
@@ -307,43 +329,45 @@ Generate a response based on the information above.""")
                 return await self._handle_memory_request(params, user_id)
             
             # Product actions (unchanged)
-            # For show_new_arrivals
             elif action == "show_new_arrivals":
                 limit = params.get("limit", 8)
                 result = await self.wix_client.get_new_arrivals(limit)
                 return {
                     "success": result.get("success", False),
                     "type": "new_arrivals",
-                    "products": result.get("metric_value", []),  # Extract metric_value
+                    "products": result.get("metric_value", []),
                     "count": len(result.get("metric_value", [])),
-                    "limit_requested": limit
+                    "limit_requested": limit,
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
 
-            # For show_mens_products
             elif action == "show_mens_products":
                 limit = params.get("limit", 8)
                 result = await self.wix_client.get_mens_products(limit)
                 return {
                     "success": result.get("success", False),
                     "type": "mens_products",
-                    "products": result.get("metric_value", []),  # Extract metric_value
+                    "products": result.get("metric_value", []),
                     "count": len(result.get("metric_value", [])),
-                    "category": "men's"
+                    "category": "men's",
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
 
-            # For show_womens_products
             elif action == "show_womens_products":
                 limit = params.get("limit", 8)
                 result = await self.wix_client.get_womens_products(limit)
                 return {
                     "success": result.get("success", False),
                     "type": "womens_products",
-                    "products": result.get("metric_value", []),  # Extract metric_value
+                    "products": result.get("metric_value", []),
                     "count": len(result.get("metric_value", [])),
-                    "category": "women's"
+                    "category": "women's",
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
 
-            # For search_products
             elif action == "search_products":
                 query = params.get("query", "")
                 limit = params.get("limit", 8)
@@ -351,16 +375,21 @@ Generate a response based on the information above.""")
                     return {
                         "success": False,
                         "error": "No search query provided",
-                        "type": "search_error"
+                        "type": "search_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 result = await self.wix_client.search_products(query, limit)
                 return {
                     "success": result.get("success", False),
                     "type": "search_results",
-                    "products": result.get("metric_value", []),  # Extract metric_value
+                    "products": result.get("metric_value", []),
                     "count": len(result.get("metric_value", [])),
-                    "search_query": query
+                    "search_query": query,
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
+
             # Single order check (existing)
             elif action == "check_order":
                 order_id = params.get("order_id", "")
@@ -370,7 +399,9 @@ Generate a response based on the information above.""")
                         "success": False,
                         "error": "No order ID provided",
                         "type": "order_error",
-                        "help_message": "Please provide your order ID to check status"
+                        "help_message": "Please provide your order ID to check status",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 if not user_id:
@@ -378,7 +409,9 @@ Generate a response based on the information above.""")
                         "success": False,
                         "error": "User authentication required to check order status",
                         "type": "auth_error",
-                        "help_message": "Please make sure you're logged in to check your order status"
+                        "help_message": "Please make sure you're logged in to check your order status",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 print(f"🔍 Checking single order: {order_id} (user: {user_id})")
@@ -393,7 +426,9 @@ Generate a response based on the information above.""")
                         "type": "order_error",
                         "order_id": order_id,
                         "error": error_message,
-                        "error_code": error_code
+                        "error_code": error_code,
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 return {
@@ -401,12 +436,14 @@ Generate a response based on the information above.""")
                     "type": "order_status",
                     "order_id": order_id,
                     "order_data": order_info,
-                    "items": order_info.get("metric_value", []),  # Use metric_value instead of items
-                    "totalItems": order_info.get("context", {}).get("totalItems", 0),  # Access totalItems from context
-                    "itemsSummary": order_info.get("context", {}).get("statusGroups", {}),  # Use statusGroups as itemsSummary
+                    "items": order_info.get("metric_value", []),
+                    "totalItems": order_info.get("context", {}).get("totalItems", 0),
+                    "itemsSummary": order_info.get("context", {}).get("statusGroups", {}),
                     "statusGroups": order_info.get("context", {}).get("statusGroups", {}),
                     "hasMultipleItems": order_info.get("context", {}).get("hasMultipleItems", False),
-                    "uniqueStatuses": order_info.get("context", {}).get("uniqueStatuses", [])
+                    "uniqueStatuses": order_info.get("context", {}).get("uniqueStatuses", []),
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
             
             # NEW: Multiple order check
@@ -418,14 +455,18 @@ Generate a response based on the information above.""")
                         "success": False,
                         "error": "No order IDs provided",
                         "type": "order_error",
-                        "help_message": "Please provide order IDs to check status"
+                        "help_message": "Please provide order IDs to check status",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 if not user_id:
                     return {
                         "success": False,
                         "error": "User authentication required",
-                        "type": "auth_error"
+                        "type": "auth_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 print(f"🔍 Checking multiple orders: {order_ids} (user: {user_id})")
@@ -436,47 +477,74 @@ Generate a response based on the information above.""")
                         "success": False,
                         "type": "multiple_order_error",
                         "error": result.get("error", "Failed to check multiple orders"),
-                        "order_ids": order_ids
+                        "order_ids": order_ids,
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 return {
                     "success": True,
                     "type": "multiple_order_status",
                     "order_ids": order_ids,
-                    "requested_count": result.get("requestedOrders", 0),
-                    "successful_count": result.get("successfulOrders", 0),
-                    "failed_count": result.get("failedOrders", 0),
-                    "successful": result.get("successful", []),
-                    "failed": result.get("failed", []),
-                    "summary": result.get("summary", {})
+                    "requested_count": result.get("context", {}).get("requestedOrders", 0),
+                    "successful_count": result.get("context", {}).get("successfulOrders", 0),
+                    "failed_count": result.get("context", {}).get("failedOrders", 0),
+                    "successful": result.get("metric_value", []),
+                    "failed": result.get("context", {}).get("failed", []),
+                    "summary": result.get("context", {}).get("summary", {}),
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
             
-            # NEW: Get last N orders
-            # For get_last_orders
+            # ENHANCED: Get last N orders with renderType support
             elif action == "get_last_orders":
                 count = params.get("count", 1)
                 if not user_id:
                     return {
                         "success": False,
                         "error": "User authentication required",
-                        "type": "auth_error"
+                        "type": "auth_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
-                print(f"🔍 Getting last {count} orders (user: {user_id})")
-                result = await self.wix_client.get_last_orders(user_id, count)
+                
+                print(f"🔍 Getting last {count} orders with renderTypes (user: {user_id})")
+                # ENHANCED: Request renderTypes from the API
+                result = await self.wix_client.get_last_orders(user_id, count, include_render_types=True)
+                
                 if not result.get("success", False):
                     return {
                         "success": False,
                         "type": "last_orders_error",
                         "error": result.get("error", "Failed to get last orders"),
-                        "count": count
+                        "count": count,
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
+                
+                # ENHANCED: Check for renderTypes in the response
+                orders = result.get("metric_value", [])
+                has_render_types = False
+                interactive_count = 0
+                
+                for order in orders:
+                    if "renderItems" in order and order["renderItems"]:
+                        has_render_types = True
+                        interactive_count += len([item for item in order["renderItems"] if item.get("renderType") == "button"])
+                        print(f"🎨 Order {order.get('_id', 'unknown')} has {len(order['renderItems'])} render items")
+                
+                print(f"🎨 RenderType Summary: has_render_types={has_render_types}, interactive_count={interactive_count}")
+                
                 return {
                     "success": True,
                     "type": "last_orders",
-                    "orders": result.get("metric_value", []),  # Use metric_value instead of orders
+                    "orders": orders,
                     "requested_count": count,
-                    "actual_count": len(result.get("metric_value", [])),
-                    "context": result.get("context", {})
+                    "actual_count": len(orders),
+                    "context": result.get("context", {}),
+                    "has_render_types": has_render_types,
+                    "interactive_count": interactive_count,
+                    "rendertype_enabled": result.get("context", {}).get("renderTypesEnabled", False)
                 }
             
             # NEW: Get recent orders (time-based)
@@ -487,7 +555,9 @@ Generate a response based on the information above.""")
                     return {
                         "success": False,
                         "error": "User authentication required",
-                        "type": "auth_error"
+                        "type": "auth_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 print(f"🔍 Getting recent orders (last {days} days, user: {user_id})")
@@ -498,16 +568,20 @@ Generate a response based on the information above.""")
                         "success": False,
                         "type": "recent_orders_error",
                         "error": result.get("error", "Failed to get recent orders"),
-                        "days": days
+                        "days": days,
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 return {
                     "success": True,
                     "type": "recent_orders",
-                    "orders": result.get("orders", []),
-                    "total_orders": result.get("totalOrders", 0),
-                    "date_range": result.get("dateRange", {}),
-                    "days": days
+                    "orders": result.get("metric_value", []),
+                    "total_orders": result.get("context", {}).get("totalOrders", 0),
+                    "date_range": result.get("context", {}).get("dateRange", {}),
+                    "days": days,
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
             
             # NEW: Get orders by status
@@ -519,14 +593,18 @@ Generate a response based on the information above.""")
                     return {
                         "success": False,
                         "error": "No status provided",
-                        "type": "parameter_error"
+                        "type": "parameter_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 if not user_id:
                     return {
                         "success": False,
                         "error": "User authentication required",
-                        "type": "auth_error"
+                        "type": "auth_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 print(f"🔍 Getting orders by status: {status} (user: {user_id})")
@@ -537,15 +615,19 @@ Generate a response based on the information above.""")
                         "success": False,
                         "type": "orders_by_status_error",
                         "error": result.get("error", "Failed to get orders by status"),
-                        "status": status
+                        "status": status,
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 return {
                     "success": True,
                     "type": "orders_by_status",
-                    "orders": result.get("orders", []),
-                    "total_orders": result.get("totalOrders", 0),
-                    "filter_status": status
+                    "orders": result.get("metric_value", []),
+                    "total_orders": result.get("context", {}).get("totalOrders", 0),
+                    "filter_status": status,
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
             
             # NEW: Get order statistics
@@ -554,7 +636,9 @@ Generate a response based on the information above.""")
                     return {
                         "success": False,
                         "error": "User authentication required",
-                        "type": "auth_error"
+                        "type": "auth_error",
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 print(f"📊 Getting order statistics (user: {user_id})")
@@ -564,14 +648,18 @@ Generate a response based on the information above.""")
                     return {
                         "success": False,
                         "type": "order_stats_error",
-                        "error": result.get("error", "Failed to get order statistics")
+                        "error": result.get("error", "Failed to get order statistics"),
+                        "has_render_types": False,
+                        "interactive_count": 0
                     }
                 
                 return {
                     "success": True,
                     "type": "order_statistics",
-                    "statistics": result.get("statistics", {}),
-                    "context": result.get("context", "")
+                    "statistics": result.get("metric_value", [{}])[0] if result.get("metric_value") else {},
+                    "context": result.get("context", ""),
+                    "has_render_types": False,
+                    "interactive_count": 0
                 }
             
             elif action == "general_help":
@@ -589,7 +677,9 @@ Generate a response based on the information above.""")
                 "success": False,
                 "error": str(e),
                 "action": action,
-                "type": "execution_error"
+                "type": "execution_error",
+                "has_render_types": False,
+                "interactive_count": 0
             }
     
     async def _handle_memory_request(self, params: Dict[str, Any], user_id: str) -> Dict[str, Any]:
@@ -598,7 +688,9 @@ Generate a response based on the information above.""")
             return {
                 "success": False,
                 "error": "Cannot access conversation history without user context",
-                "type": "memory_error"
+                "type": "memory_error",
+                "has_render_types": False,
+                "interactive_count": 0
             }
         
         request_type = params.get("type", "conversation_summary")
@@ -610,7 +702,9 @@ Generate a response based on the information above.""")
                 "type": "memory_response",
                 "request_type": "previous_user_message",
                 "memory_content": last_message or "I don't see any previous messages from you in this conversation.",
-                "found": last_message is not None
+                "found": last_message is not None,
+                "has_render_types": False,
+                "interactive_count": 0
             }
         
         elif request_type == "previous_bot_message":
@@ -620,7 +714,9 @@ Generate a response based on the information above.""")
                 "type": "memory_response",
                 "request_type": "previous_bot_message",
                 "memory_content": last_bot_message or "I haven't responded to anything yet in this conversation.",
-                "found": last_bot_message is not None
+                "found": last_bot_message is not None,
+                "has_render_types": False,
+                "interactive_count": 0
             }
         
         elif request_type == "conversation_summary":
@@ -630,7 +726,9 @@ Generate a response based on the information above.""")
                 "type": "memory_response",
                 "request_type": "conversation_summary",
                 "memory_content": f"We've had {len(history)} messages in our conversation. You can ask about specific details, like orders or products, if you want to dive deeper!",
-                "found": bool(history)
+                "found": bool(history),
+                "has_render_types": False,
+                "interactive_count": 0
             }
         
         elif request_type == "order_id_history":
@@ -649,7 +747,9 @@ Generate a response based on the information above.""")
                 "type": "memory_response",
                 "request_type": "order_id_history",
                 "memory_content": list(order_ids) if order_ids else "You haven't mentioned any order IDs in our conversation yet.",
-                "found": bool(order_ids)
+                "found": bool(order_ids),
+                "has_render_types": False,
+                "interactive_count": 0
             }
         
         else:
@@ -657,7 +757,9 @@ Generate a response based on the information above.""")
                 "success": True,
                 "type": "memory_response",
                 "request_type": "general",
-                "memory_content": "I remember our conversation and I'm here to help! What would you like to know?"
+                "memory_content": "I remember our conversation and I'm here to help! What would you like to know?",
+                "has_render_types": False,
+                "interactive_count": 0
             }
     
     async def _generate_natural_response(self, original_message: str, action_taken: str, function_result: Dict[str, Any], was_successful: bool, conversation_context: str) -> str:
@@ -672,6 +774,8 @@ Generate a response based on the information above.""")
             memory_content = function_result.get("memory_content", "")
             context = function_result.get("context", {})
             statistics = function_result.get("statistics", {})
+            has_render_types = function_result.get("has_render_types", False)
+            interactive_count = function_result.get("interactive_count", 0)
             
             # Format orders list for different result types
             orders_list = []
@@ -696,13 +800,21 @@ Generate a response based on the information above.""")
                     orders_list.append(f"❌ {order.get('orderId', 'Unknown')} - {order.get('error', 'Error')}")
             
             elif result_type in ["last_orders", "recent_orders", "orders_by_status"]:
-                # Order lists
+                # Order lists with potential renderTypes
                 orders = function_result.get("orders", [])
                 for order in orders:
                     formatted_date = order.get("formattedDate", "Unknown date")
-                    status = order.get("aggregatedStatus", "Unknown")  # Use aggregatedStatus
+                    status = order.get("aggregatedStatus", "Unknown")
                     total = order.get("total", 0)
-                    orders_list.append(f"📦 {order.get('_id', 'Unknown')} - {formatted_date} - {status} - ${total}")
+                    
+                    # Check for interactive elements
+                    interactive_note = ""
+                    if order.get("renderItems"):
+                        button_count = len([item for item in order["renderItems"] if item.get("renderType") == "button"])
+                        if button_count > 0:
+                            interactive_note = f" 🔘 [{button_count} interactive buttons]"
+                    
+                    orders_list.append(f"📦 {order.get('_id', 'Unknown')} - {formatted_date} - {status} - ${total}{interactive_note}")
             
             elif result_type in ["new_arrivals", "mens_products", "womens_products", "search_results"]:
                 # Product lists
@@ -711,7 +823,7 @@ Generate a response based on the information above.""")
                     price = product.get("formattedPrice", product.get("price", "N/A"))
                     orders_list.append(f"🛍️ {product.get('name', 'Unknown')} - {price}")
             
-            # Generate response using AI
+            # Generate response using AI with renderType information
             response = await asyncio.to_thread(
                 self.response_generator.invoke,
                 {
@@ -726,7 +838,9 @@ Generate a response based on the information above.""")
                     "statistics": statistics,
                     "error": error,
                     "context": context,
-                    "memory_content": memory_content
+                    "memory_content": memory_content,
+                    "has_render_types": has_render_types,
+                    "interactive_count": interactive_count
                 }
             )
             
@@ -739,6 +853,7 @@ Generate a response based on the information above.""")
                 result=function_result,
                 original_message=original_message
             )
+
     async def _create_fallback_response(self, action: str, result: Dict[str, Any], original_message: str) -> str:
         """Create fallback response when AI generation fails"""
         if not result.get("success", False):
@@ -758,7 +873,9 @@ Generate a response based on the information above.""")
         
         elif action == "get_last_orders":
             count = result.get("actual_count", 0)
-            return f"Here are your last {count} order{'s' if count != 1 else ''}!"
+            has_render_types = result.get("has_render_types", False)
+            interactive_note = " with interactive buttons" if has_render_types else ""
+            return f"Here are your last {count} order{'s' if count != 1 else ''}{interactive_note}!"
         
         elif action == "get_recent_orders":
             total_orders = result.get("total_orders", 0)
@@ -797,7 +914,9 @@ Generate a response based on the information above.""")
         return {
             "success": True,
             "type": "help_response",
-            "content": response
+            "content": response,
+            "has_render_types": False,
+            "interactive_count": 0
         }
     
     async def _handle_error_intelligently(self, message: str, error: str) -> Dict[str, Any]:
@@ -820,7 +939,9 @@ Generate a response based on the information above.""")
                 "confidence": 0.8,
                 "action": "error_handling",
                 "success": False,
-                "reasoning": f"Error occurred: {error}"
+                "reasoning": f"Error occurred: {error}",
+                "renderTypes": False,
+                "interactive_elements": 0
             }
         except Exception:
             return {
@@ -828,7 +949,9 @@ Generate a response based on the information above.""")
                 "confidence": 0.5,
                 "action": "error_handling",
                 "success": False,
-                "reasoning": f"Error in error handling: {error}"
+                "reasoning": f"Error in error handling: {error}",
+                "renderTypes": False,
+                "interactive_elements": 0
             }
     
     def is_healthy(self) -> bool:
