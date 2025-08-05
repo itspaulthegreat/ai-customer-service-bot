@@ -1,4 +1,5 @@
 import os
+import logging  # Added for secure exception handling
 from dotenv import load_dotenv
 import requests
 from typing import List, Dict, Optional, Any
@@ -9,6 +10,17 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 import uvicorn
 import asyncio
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Logs to console
+        # Optionally add logging.FileHandler('app.log') for file logging
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -37,7 +49,7 @@ class ChatMessage(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     confidence: float = 0.8
-    render: Optional[List[Any]] = []  # Add render field
+    render: Optional[List[Any]] = []
     action: Optional[str] = None
     success: Optional[bool] = True
     reasoning: Optional[str] = None
@@ -50,9 +62,9 @@ try:
         max_tokens=1200,
         groq_api_key=GROQ_API_KEY
     )
-    print("✅ Groq LLM initialized successfully")
+    logger.info("✅ Groq LLM initialized successfully")
 except Exception as e:
-    print(f"❌ Error initializing Groq: {e}")
+    logger.error(f"❌ Error initializing Groq: {str(e)}", exc_info=True)
     raise
 
 # Try to import the enhanced AI system
@@ -65,51 +77,51 @@ try:
     
     # Initialize the Enhanced Pure AI agent
     agent = PureAIAgent(GROQ_API_KEY, wix_client)
-    print("✅ Enhanced Pure AI agent system initialized successfully!")
-    print("🚀 NEW FEATURES: Multiple orders, order history, statistics, contextual queries")
+    logger.info("✅ Enhanced Pure AI agent system initialized successfully!")
+    logger.info("🚀 NEW FEATURES: Multiple orders, order history, statistics, contextual queries")
     use_ai_system = True
     
 except Exception as e:
-    print(f"⚠️  Error loading Enhanced AI system: {e}")
-    print("📦 Falling back to legacy system...")
+    logger.error(f"⚠️ Error loading Enhanced AI system: {str(e)}", exc_info=True)
+    logger.info("📦 Falling back to legacy system...")
     use_ai_system = False
 
 # Legacy Wix API client for fallback
 class LegacyWixAPIClient:
     def __init__(self, base_url: str):
         self.base_url = base_url if base_url else "https://your-wix-site.com"
-        print(f"🔗 Legacy Wix Base URL: {self.base_url}")
+        logger.info(f"🔗 Legacy Wix Base URL: {self.base_url}")
     
     def test_connection(self) -> bool:
         """Test if Wix API is reachable"""
         try:
             url = f"{self.base_url}/_functions/getNewArrivals"
-            print(f"🔍 Testing connection to: {url}")
+            logger.info(f"🔍 Testing connection to: {url}")
             response = requests.get(url, timeout=10)
-            print(f"📡 Response status: {response.status_code}")
+            logger.info(f"📡 Response status: {response.status_code}")
             return response.status_code == 200
         except Exception as e:
-            print(f"❌ Connection test failed: {e}")
+            logger.error(f"❌ Connection test failed: {str(e)}", exc_info=True)
             return False
     
     def get_new_arrivals(self, limit: int = 15) -> List[Dict]:
         """Get new arrivals from Wix"""
         try:
             url = f"{self.base_url}/_functions/getNewArrivals?limit={limit}"
-            print(f"🛍️ Fetching new arrivals from: {url}")
+            logger.info(f"🛍️ Fetching new arrivals from: {url}")
             
             response = requests.get(url, timeout=15)
-            print(f"📡 New arrivals response status: {response.status_code}")
+            logger.info(f"📡 New arrivals response status: {response.status_code}")
             
             if response.status_code == 200:
                 products = response.json()
-                print(f"✅ Found {len(products)} new arrivals")
+                logger.info(f"✅ Found {len(products)} new arrivals")
                 return products
             else:
-                print(f"❌ Error response: {response.text}")
+                logger.error(f"❌ Error response: {response.text}")
                 return []
         except Exception as e:
-            print(f"❌ Error fetching new arrivals: {e}")
+            logger.error(f"❌ Error fetching new arrivals: {str(e)}", exc_info=True)
             return []
 
 # Initialize legacy client as fallback
@@ -120,7 +132,7 @@ if not use_ai_system:
 def legacy_process_message(message: str) -> str:
     """Legacy message processing with basic pattern matching"""
     message_lower = message.lower()
-    print(f"🤔 Legacy processing message: '{message}'")
+    logger.info(f"🤔 Legacy processing message: '{message}'")
     
     # Very basic new arrivals detection
     if any(phrase in message_lower for phrase in [
@@ -128,7 +140,7 @@ def legacy_process_message(message: str) -> str:
         "latest", "recent", "newest", "show me new", "new items",
         "new products", "fresh", "just added", "arrivals"
     ]):
-        print("🆕 Detected new arrivals request")
+        logger.info("🆕 Detected new arrivals request")
         try:
             products = legacy_wix_client.get_new_arrivals(8)
             if not products:
@@ -155,7 +167,7 @@ def legacy_process_message(message: str) -> str:
             return result
             
         except Exception as e:
-            print(f"❌ Error in legacy new arrivals: {e}")
+            logger.error(f"❌ Error in legacy new arrivals: {str(e)}", exc_info=True)
             return "I encountered an error while fetching new arrivals. Please try again or contact support."
     
     else:
@@ -165,11 +177,18 @@ def legacy_process_message(message: str) -> str:
 # API ENDPOINTS - ENHANCED FOR ADVANCED ORDER MANAGEMENT
 # ============================================================================
 
+@app.get("/config")
+async def get_config():
+    return {
+        "API_BASE": "http://localhost:8000",
+        "WIX_BASE_URL": WIX_BASE_URL
+    }
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(message: ChatMessage):
     try:
-        print(f"\n💬 Received message: {message.message}")
-        print(f"👤 User ID: {message.user_id}")
+        logger.info(f"💬 Received message: {message.message}")
+        logger.info(f"👤 User ID: {message.user_id}")
         
         if use_ai_system:
             result = await agent.process_message(
@@ -180,7 +199,7 @@ async def chat(message: ChatMessage):
             return ChatResponse(
                 response=result["response"],
                 confidence=result["confidence"],
-                render=result["render"],  # Include render
+                render=result["render"],
                 action=result["action"],
                 success=result["success"],
                 reasoning=result["reasoning"]
@@ -190,9 +209,7 @@ async def chat(message: ChatMessage):
             return ChatResponse(response=response_text, confidence=0.9)
     
     except Exception as e:
-        print(f"❌ Error in chat: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Error in chat: {str(e)}", exc_info=True)
         return ChatResponse(
             response="I apologize for the technical difficulty. Please try again or contact our customer service team.",
             confidence=0.1
@@ -274,10 +291,11 @@ async def health_check():
                 "no_patterns": True
             }
         except Exception as e:
+            logger.error(f"❌ Error in health check: {str(e)}", exc_info=True)
             return {
                 "status": "degraded",
                 "system": "enhanced_ai",
-                "error": str(e),
+                "error": "An error occurred while checking system health",
                 "fallback_available": True
             }
     else:
@@ -294,10 +312,11 @@ async def health_check():
                 "note": "Using basic pattern matching as fallback"
             }
         except Exception as e:
+            logger.error(f"❌ Error in legacy health check: {str(e)}", exc_info=True)
             return {
                 "status": "error",
                 "system": "legacy_fallback", 
-                "error": str(e)
+                "error": "An error occurred while checking system health"
             }
 
 @app.get("/test-ai")
@@ -311,7 +330,7 @@ async def test_ai():
         }
     
     try:
-        print("🧪 Testing enhanced AI agent capabilities...")
+        logger.info("🧪 Testing enhanced AI agent capabilities...")
         
         # Test with different types of messages including new order features
         test_messages = [
@@ -338,9 +357,10 @@ async def test_ai():
                     "response_preview": result.get("response", "")[:100] + "..." if len(result.get("response", "")) > 100 else result.get("response", "")
                 })
             except Exception as e:
+                logger.error(f"❌ Error testing message '{msg}': {str(e)}", exc_info=True)
                 test_results.append({
                     "message": msg,
-                    "error": str(e),
+                    "error": "An error occurred during processing",
                     "success": False
                 })
         
@@ -363,21 +383,21 @@ async def test_ai():
         }
         
     except Exception as e:
+        logger.error(f"❌ Error in test-ai: {str(e)}", exc_info=True)
         return {
-            "error": str(e),
+            "error": "An error occurred during AI testing",
             "system": "enhanced_ai",
             "test_status": "failed"
         }
+
 @app.get("/proxy")
 async def proxy_wix_endpoint(request: Request, api: str):
     try:
         # Construct Wix URL from api parameter
         query_string = request.query_params
-        # Remove leading slashes and ensure proper path
         endpoint = api.lstrip('/').replace('/_functions/', '')
         url = f"{WIX_BASE_URL}/_functions/{endpoint}"
         if query_string:
-            # Exclude the 'api' parameter from query string
             query_params = {k: v for k, v in query_string.items() if k != 'api'}
             if query_params:
                 url += f"?{requests.compat.urlencode(query_params)}"
@@ -387,26 +407,24 @@ async def proxy_wix_endpoint(request: Request, api: str):
             "x-user-email": request.headers.get("x-user-email", ""),
             "x-wix-request": "true"
         }
-        print(f"📡 Proxying request to: {url}")
+        logger.info(f"📡 Proxying request to: {url}")
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"❌ Proxy error for {api}: {str(e)}")
-        return {"success": False, "error": str(e), "code": "PROXY_ERROR"}
+        logger.error(f"❌ Proxy error for {api}: {str(e)}", exc_info=True)
+        return {"success": False, "error": "Failed to process proxy request", "code": "PROXY_ERROR"}
 
 @app.get("/test-wix")
 async def test_wix():
     """Test enhanced Wix integration"""
     try:
-        print("🧪 Testing enhanced Wix integration...")
+        logger.info("🧪 Testing enhanced Wix integration...")
         
         if use_ai_system:
-            # Test enhanced system with new endpoints
             connection_ok = await wix_client.test_connection()
             new_arrivals = await wix_client.get_new_arrivals(3)
             
-            # Test new order endpoints (these would require a real user ID)
             test_results = {
                 "new_arrivals": len(new_arrivals) > 0,
                 "connection": connection_ok
@@ -430,7 +448,6 @@ async def test_wix():
                 "test_status": "success" if connection_ok and new_arrivals else "partial"
             }
         else:
-            # Test legacy system
             connection_ok = legacy_wix_client.test_connection()
             new_arrivals = legacy_wix_client.get_new_arrivals(3)
             
@@ -443,8 +460,9 @@ async def test_wix():
                 "test_status": "success" if connection_ok and new_arrivals else "failed"
             }
     except Exception as e:
+        logger.error(f"❌ Error in test-wix: {str(e)}", exc_info=True)
         return {
-            "error": str(e), 
+            "error": "An error occurred during Wix testing",
             "system": "enhanced_ai" if use_ai_system else "legacy_fallback",
             "test_status": "failed"
         }
@@ -525,7 +543,6 @@ async def memory_test():
     try:
         from src.bot.session_memory import session_memory
         
-        # Get memory statistics
         stats = session_memory.get_session_stats()
         
         return {
@@ -537,43 +554,43 @@ async def memory_test():
                 "Bot response tracking", 
                 "Conversation context",
                 "Order ID history extraction",
-                "Order ID history extraction",
                 "Session timeout management"
             ],
             "test_status": "healthy"
         }
     except Exception as e:
+        logger.error(f"❌ Error in memory-test: {str(e)}", exc_info=True)
         return {
-            "error": str(e),
+            "error": "An error occurred during memory testing",
             "system": "enhanced_ai",
             "test_status": "failed"
         }
 
 if __name__ == "__main__":
-    print(f"\n🚀 Starting Enhanced AI Customer Service Bot v4.0...")
-    print(f"📡 Wix URL: {WIX_BASE_URL}")
-    print(f"🔑 Groq API Key: {'✅ Set' if GROQ_API_KEY else '❌ Missing'}")
-    print(f"🤖 System: {'Enhanced AI (Advanced Order Management!)' if use_ai_system else 'Legacy Fallback'}")
+    logger.info(f"🚀 Starting Enhanced AI Customer Service Bot v4.0...")
+    logger.info(f"📡 Wix URL: {WIX_BASE_URL}")
+    logger.info(f"🔑 Groq API Key: {'✅ Set' if GROQ_API_KEY else '❌ Missing'}")
+    logger.info(f"🤖 System: {'Enhanced AI (Advanced Order Management!)' if use_ai_system else 'Legacy Fallback'}")
     
     if use_ai_system:
-        print("✨ NEW ENHANCED FEATURES:")
-        print("   🔍 Multiple Order Status Checking")
-        print("   📋 Order History Queries (Last N Orders)")
-        print("   📅 Time-based Order Filtering (Recent Orders)")
-        print("   🏷️  Status-based Order Filtering")
-        print("   📊 Order Statistics & Analytics")
-        print("   💭 Enhanced Conversation Memory")
-        print("   🧠 Natural Language Understanding")
-        print("   🚫 Zero Pattern Matching")
-        print("\n📝 Example Queries:")
-        print("   • 'Check my order ABC123'")
-        print("   • 'Status of orders ABC123, XYZ789, DEF456'")
-        print("   • 'Show my last 3 orders'")
-        print("   • 'Orders from last week'")
-        print("   • 'My pending orders'")
-        print("   • 'How much have I spent?'")
-        print("   • 'What order IDs did I mention?'")
+        logger.info("✨ NEW ENHANCED FEATURES:")
+        logger.info("   🔍 Multiple Order Status Checking")
+        logger.info("   📋 Order History Queries (Last N Orders)")
+        logger.info("   📅 Time-based Order Filtering (Recent Orders)")
+        logger.info("   🏷️ Status-based Order Filtering")
+        logger.info("   📊 Order Statistics & Analytics")
+        logger.info("   💭 Enhanced Conversation Memory")
+        logger.info("   🧠 Natural Language Understanding")
+        logger.info("   🚫 Zero Pattern Matching")
+        logger.info("\n📝 Example Queries:")
+        logger.info("   • 'Check my order ABC123'")
+        logger.info("   • 'Status of orders ABC123, XYZ789, DEF456'")
+        logger.info("   • 'Show my last 3 orders'")
+        logger.info("   • 'Orders from last week'")
+        logger.info("   • 'My pending orders'")
+        logger.info("   • 'How much have I spent?'")
+        logger.info("   • 'What order IDs did I mention?'")
     else:
-        print("⚠️  Running in fallback mode with basic pattern matching")
+        logger.info("⚠️ Running in fallback mode with basic pattern matching")
     
     uvicorn.run(app, host="0.0.0.0", port=PORT)
