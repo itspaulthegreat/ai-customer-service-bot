@@ -3,14 +3,14 @@ import logging  # Added for secure exception handling
 from dotenv import load_dotenv
 import requests
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
 import uvicorn
 import asyncio
-
+from fastapi.security import APIKeyHeader
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -177,8 +177,17 @@ def legacy_process_message(message: str) -> str:
 # API ENDPOINTS - ENHANCED FOR ADVANCED ORDER MANAGEMENT
 # ============================================================================
 
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+# Validate API key
+async def verify_api_key(api_key: str = Security(api_key_header)):
+    expected_api_key = os.getenv("CONFIG_API_KEY")  # Load from .env
+    if api_key != expected_api_key:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return api_key
+
 @app.get("/config")
-async def get_config():
+async def get_config(api_key: str = Depends(verify_api_key)):
     return {
         "API_BASE": "http://localhost:8000",
         "WIX_BASE_URL": WIX_BASE_URL

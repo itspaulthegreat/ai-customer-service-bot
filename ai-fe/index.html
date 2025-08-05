@@ -471,7 +471,7 @@
     <script>
         // Hardcoded test user
         const currentUser = {
-            userId: '43d05878-3efc-4bd3-bb45-051a79af8897',
+            userId: '43d05878-3efc-4bd3-bb45-051a79af8898',
             email: '43d05878-3efc-4bd3-bb45-051a79af8898',
             nickname: 'Local Tester',
             sessionId: 'local-session-001'
@@ -485,16 +485,20 @@
         let messageCount = 0;
 
         // Fetch WIX_BASE_URL from /config endpoint
-        async function fetchConfig() {
+                async function fetchConfig() {
             try {
-                const res = await fetch(`${API_BASE}/config`);
+                const res = await fetch(`${API_BASE}/config`, {
+            headers: {
+                'X-API-Key': 'a231sdaa-3xcz456cd-345ddsasd-xe1zz'  // Replace with the same key as in .env
+            }
+        });
                 if (!res.ok) throw new Error('Failed to fetch config');
                 const data = await res.json();
                 WIX_BASE_URL = data.WIX_BASE_URL;
                 console.log(`✅ Fetched WIX_BASE_URL: ${WIX_BASE_URL}`);
             } catch (e) {
                 console.error('❌ Error fetching config:', e);
-                WIX_BASE_URL = 'https://kk185994.wixstudio.com/manly'; // Fallback
+                // WIX_BASE_URL = 'https://kk185994.wixstudio.com/manly'; // Fallback
                 showError('Failed to load configuration. Using fallback URL.');
             }
         }
