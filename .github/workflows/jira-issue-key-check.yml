@@ -4,6 +4,9 @@ on:
   pull_request:
     types: [opened, edited, synchronize]
 
+permissions:
+  contents: read  # 🔐 Limit GITHUB_TOKEN access to read-only (security best practice)
+
 jobs:
   validate-branch-and-commits:
     runs-on: ubuntu-latest
