@@ -1,0 +1,58 @@
+name: Enforce Jira Issue Key (AA)
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  contents: read  # 🔐 Limit GITHUB_TOKEN access to read-only (security best practice)
+
+jobs:
+  validate-branch-and-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Important for accessing commit history
+
+      - name: Validate PR branch name
+        run: |
+          echo "🔍 Checking branch name: ${{ github.head_ref }}"
+          # Skip validation for main, Validation-Branch, and production
+          if [[ "${{ github.head_ref }}" == "main" || "${{ github.head_ref }}" == "Validation-Branch" || "${{ github.head_ref }}" == "production" ]]; then
+            echo "✅ Branch '${{ github.head_ref }}' is exempt from Jira key validation"
+          elif ! [[ "${{ github.head_ref }}" =~ ^AA-[0-9]+ ]]; then
+            echo "❌ Branch name must start with a Jira issue key from project 'AA' (e.g., AA-123)"
+            exit 1
+          fi
+
+      - name: Fetch base branch
+        if: ${{ github.head_ref != 'main' && github.head_ref != 'Validation-Branch' && github.head_ref != 'production' }}
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Get commit messages
+        if: ${{ github.head_ref != 'main' && github.head_ref != 'Validation-Branch' && github.head_ref != 'production' }}
+        id: commits
+        run: |
+          commits=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$commits" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Validate commit messages
+        if: ${{ github.head_ref != 'main' && github.head_ref != 'Validation-Branch' && github.head_ref != 'production' }}
+        run: |
+          echo "🔍 Validating commit messages contain AA-<number> keys"
+          while read -r msg; do
+            # Skip merge commits
+            if [[ "$msg" =~ ^Merge ]]; then
+              echo "ℹ️ Skipping merge commit: '$msg'"
+              continue
+            fi
+
+            if ! [[ "$msg" =~ AA-[0-9]+ ]]; then
+              echo "❌ Commit message missing Jira key from 'AA': '$msg'"
+              exit 1
+            fi
+          done <<< "${{ steps.commits.outputs.commits }}"
