@@ -333,7 +333,22 @@
             text-align: center;
         }
 
-        /* Responsive adjustments for lightbox */
+        .render-button {
+            padding: 8px 16px;
+            margin: 5px 0;
+            background: #000000;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease;
+        }
+
+        .render-button:hover {
+            background: #333333;
+        }
+
         @media (max-width: 600px) {
             .chat-header {
                 padding: 12px 15px;
@@ -371,6 +386,11 @@
             .welcome-chip {
                 width: 180px;
                 text-align: center;
+            }
+            
+            .render-button {
+                font-size: 13px;
+                padding: 6px 12px;
             }
         }
     </style>
@@ -448,178 +468,279 @@
         </div>
     </div>
 
-     <script>
-    // 👇 Hardcoded test user
-    const currentUser = {
-      userId: '43d05878-3efc-4bd3-bb45-051a79af8897',
-      email: '43d05878-3efc-4bd3-bb45-051a79af8898',
-      nickname: 'Local Tester',
-      sessionId: 'local-session-001'
-    };
+    <script>
+        // Hardcoded test user
+        const currentUser = {
+            userId: '43d05878-3efc-4bd3-bb45-051a79af8898',
+            email: '43d05878-3efc-4bd3-bb45-051a79af8898',
+            nickname: 'Local Tester',
+            sessionId: 'local-session-001'
+        };
 
-    const API_BASE = 'http://localhost:8000'; // 👈 Local API server
+        // API base for /chat and /health endpoints
+        const API_BASE = 'http://localhost:8000'; // Local API server for chat and health
+        let WIX_BASE_URL = ''; // Will be fetched from /config
 
-    let isConnected = false;
-    let messageCount = 0;
+        let isConnected = false;
+        let messageCount = 0;
 
-    function setupInputHandlers() {
-      const chatInput = document.getElementById('chatInput');
-      chatInput.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 100) + 'px';
-      });
-      chatInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
-        }
-      });
-      chatInput.focus();
-    }
-
-    async function checkStatus() {
-      try {
-        const res = await fetch(`${API_BASE}/health`);
-        if (res.ok) {
-          isConnected = true;
-          document.getElementById('statusDot').style.background = '#22c55e';
-          document.getElementById('statusText').textContent = 'Online';
-        } else {
-          throw new Error('Health check failed');
-        }
-      } catch (e) {
-        document.getElementById('statusDot').style.background = '#ef4444';
-        document.getElementById('statusText').textContent = 'Offline';
-        isConnected = false;
-        showError('Bot is offline. Please try again later.');
-      }
-    }
-
-    async function sendMessage() {
-      const input = document.getElementById('chatInput');
-      const message = input.value.trim();
-      if (!message || !isConnected) return;
-
-      input.value = '';
-      input.style.height = 'auto';
-      const sendBtn = document.getElementById('sendButton');
-      sendBtn.disabled = true;
-
-      if (messageCount === 0) {
-        const welcome = document.querySelector('.welcome-message');
-        if (welcome) welcome.remove();
-      }
-
-      addMessage(message, 'user');
-      showTyping(true);
-
-      try {
-        const res = await fetch(`${API_BASE}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': currentUser.userId,
-            'x-user-email': currentUser.email,
-            'x-wix-request': 'true'
-          },
-          body: JSON.stringify({
-            message,
-            user_id: currentUser.userId,
-            userEmail: currentUser.email,
-            context: {
-              isWixUser: false,
-              sessionId: currentUser.sessionId
+        // Fetch WIX_BASE_URL from /config endpoint
+                async function fetchConfig() {
+            try {
+                const res = await fetch(`${API_BASE}/config`, {
+            headers: {
+                'X-API-Key': 'a231sdaa-3xcz456cd-345ddsasd-xe1zz'  // Replace with the same key as in .env
             }
-          })
         });
-
-        const data = await res.json();
-        if (res.ok) {
-          addMessage(data.response || data.message || 'Okay!', 'bot');
-        } else {
-          throw new Error(data.detail || data.error || 'Unknown error');
+                if (!res.ok) throw new Error('Failed to fetch config');
+                const data = await res.json();
+                WIX_BASE_URL = data.WIX_BASE_URL;
+                console.log(`✅ Fetched WIX_BASE_URL: ${WIX_BASE_URL}`);
+            } catch (e) {
+                console.error('❌ Error fetching config:', e);
+                // WIX_BASE_URL = 'https://kk185994.wixstudio.com/manly'; // Fallback
+                showError('Failed to load configuration. Using fallback URL.');
+            }
         }
-      } catch (err) {
-        addMessage('Oops! Something went wrong.', 'bot');
-        showError(`Error: ${err.message}`);
-      } finally {
-        showTyping(false);
-        sendBtn.disabled = false;
-        input.focus();
-        messageCount++;
-      }
+
+        function setupInputHandlers() {
+            const chatInput = document.getElementById('chatInput');
+            chatInput.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+            });
+            chatInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            chatInput.focus();
+        }
+
+        async function checkStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/health`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': currentUser.userId,
+                        'x-user-email': currentUser.email,
+                        'x-wix-request': 'true'
+                    }
+                });
+                if (res.ok) {
+                    isConnected = true;
+                    document.getElementById('statusDot').style.background = '#22c55e';
+                    document.getElementById('statusText').textContent = 'Online';
+                } else {
+                    throw new Error('Health check failed');
+                }
+            } catch (e) {
+                document.getElementById('statusDot').style.background = '#ef4444';
+                document.getElementById('statusText').textContent = 'Offline';
+                isConnected = false;
+                showError('Bot is offline. Please try again later.');
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message || !isConnected) return;
+
+            input.value = '';
+            input.style.height = 'auto';
+            const sendBtn = document.getElementById('sendButton');
+            sendBtn.disabled = true;
+
+            if (messageCount === 0) {
+                const welcome = document.querySelector('.welcome-message');
+                if (welcome) welcome.remove();
+            }
+
+            addMessageWithRender(message, 'user');
+            showTyping(true);
+
+            try {
+                const res = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': currentUser.userId,
+                        'x-user-email': currentUser.email,
+                        'x-wix-request': 'true'
+                    },
+                    body: JSON.stringify({
+                        message,
+                        user_id: currentUser.userId,
+                        userEmail: currentUser.email,
+                        context: {
+                            isWixUser: false,
+                            sessionId: currentUser.sessionId
+                        }
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    addMessageWithRender(data.response || data.message || 'Okay!', 'bot', data.render || []);
+                } else {
+                    throw new Error(data.detail || data.error || 'Unknown error');
+                }
+            } catch (err) {
+                addMessageWithRender('Oops! Something went wrong.', 'bot');
+                showError(`Error: ${err.message}`);
+            } finally {
+                showTyping(false);
+                sendBtn.disabled = false;
+                input.focus();
+                messageCount++;
+            }
+        }
+
+        function sendQuickMessage(msg) {
+            document.getElementById('chatInput').value = msg;
+            sendMessage();
+        }
+
+    async function handleButtonClick(apiEndpoint, orderId) {
+        try {
+            showTyping(true);
+            // Call proxy endpoint with api parameter
+            const fullUrl = `${API_BASE}/proxy?api=${encodeURIComponent(apiEndpoint)}`;
+            console.log(`📡 Fetching from proxy: ${fullUrl}`);
+            const res = await fetch(fullUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-id': currentUser.userId,
+                    'x-user-email': currentUser.email,
+                    'x-wix-request': 'true'
+                }
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success && Array.isArray(data.metric_value)) {
+                let responseText = `📦 Order ${orderId}:\n`;
+                const items = data.metric_value;
+                if (items.length === 0) {
+                    responseText += `No items found for this order.`;
+                } else {
+                    items.forEach(item => {
+                        responseText += `• ${item.name || 'Unknown Item'} (Size: ${item.options?.Size || 'N/A'}, Quantity: ${item.quantity || 1}, Status: ${item.shipmentStatus || 'Unknown'})\n`;
+                    });
+                }
+                addMessageWithRender(responseText, 'bot');
+            } else {
+                addMessageWithRender(`Sorry, I couldn't retrieve details for order ${orderId}.`, 'bot');
+                showError(data.error || 'Failed to fetch order details.');
+            }
+        } catch (err) {
+            addMessageWithRender(`Oops! Something went wrong while fetching order ${orderId}.`, 'bot');
+            showError(`Error: ${err.message}`);
+        } finally {
+            showTyping(false);
+        }
     }
 
-    function sendQuickMessage(msg) {
-      document.getElementById('chatInput').value = msg;
-      sendMessage();
-    }
+        function addMessageWithRender(content, sender, render = []) {
+            console.log('addMessageWithRender called with:', { content, sender, render });
+            const chat = document.getElementById('chatMessages');
+            const msgGroup = document.createElement('div');
+            msgGroup.className = 'message-group';
 
-    function addMessage(content, sender) {
-      const chat = document.getElementById('chatMessages');
-      const msgGroup = document.createElement('div');
-      msgGroup.className = 'message-group';
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${sender}`;
 
-      const msgDiv = document.createElement('div');
-      msgDiv.className = `message ${sender}`;
+            if (sender === 'bot') {
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar bot-avatar-small';
+                avatar.textContent = 'AI';
+                msgDiv.appendChild(avatar);
+            }
 
-      if (sender === 'bot') {
-        const avatar = document.createElement('div');
-        avatar.className = 'message-avatar bot-avatar-small';
-        avatar.textContent = 'AI';
-        msgDiv.appendChild(avatar);
-      }
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
 
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'message-content';
-      contentDiv.textContent = content;
+            // Filter out empty lines and trim to handle multiple newlines
+            const lines = content.split('\n').filter(line => line.trim() !== '');
+            lines.forEach((line, index) => {
+                const lineDiv = document.createElement('div');
+                lineDiv.style.display = 'flex';
+                lineDiv.style.alignItems = 'center';
+                lineDiv.style.gap = '8px';
+                lineDiv.style.marginBottom = '4px';
 
-      msgDiv.appendChild(contentDiv);
+                // Add the line text
+                const textSpan = document.createElement('span');
+                textSpan.textContent = line;
+                lineDiv.appendChild(textSpan);
 
-      if (sender === 'user') {
-        const avatar = document.createElement('div');
-        avatar.className = 'message-avatar user-avatar-small';
-        avatar.textContent = (currentUser.nickname || 'U')[0].toUpperCase();
-        msgDiv.appendChild(avatar);
-      }
+                // Check if there's a corresponding render object
+                if (render[index] && Array.isArray(render[index]) && render[index].length > 0) {
+                    render[index].forEach(renderItem => {
+                        if (renderItem.type === 'button' && renderItem.api) {
+                            const button = document.createElement('button');
+                            button.textContent = renderItem.label || 'View Details';
+                            button.className = 'render-button';
+                            const urlParams = new URLSearchParams(renderItem.api.split('?')[1] || '');
+                            const orderId = urlParams.get('orderId') || 'unknown';
+                            button.onclick = () => handleButtonClick(renderItem.api, orderId);
+                            lineDiv.appendChild(button);
+                        }
+                    });
+                }
 
-      msgGroup.appendChild(msgDiv);
-      chat.appendChild(msgGroup);
-      chat.scrollTop = chat.scrollHeight;
-    }
+                contentDiv.appendChild(lineDiv);
+            });
 
-    function showTyping(show) {
-      const indicator = document.getElementById('typingIndicator');
-      indicator.style.display = show ? 'flex' : 'none';
-      if (show) {
-        document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-      }
-    }
+            msgDiv.appendChild(contentDiv);
 
-    function showError(msg) {
-      const existing = document.querySelector('.error-message');
-      if (existing) existing.remove();
+            if (sender === 'user') {
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar user-avatar-small';
+                avatar.textContent = (currentUser.nickname || 'U')[0].toUpperCase();
+                msgDiv.appendChild(avatar);
+            }
 
-      const errDiv = document.createElement('div');
-      errDiv.className = 'error-message';
-      errDiv.textContent = msg;
+            msgGroup.appendChild(msgDiv);
+            chat.appendChild(msgGroup);
+            chat.scrollTop = chat.scrollHeight;
+        }
 
-      const chat = document.getElementById('chatMessages');
-      chat.appendChild(errDiv);
+        function showTyping(show) {
+            const indicator = document.getElementById('typingIndicator');
+            indicator.style.display = show ? 'flex' : 'none';
+            if (show) {
+                document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+            }
+        }
 
-      setTimeout(() => {
-        if (errDiv.parentNode) errDiv.remove();
-      }, 5000);
-    }
+        function showError(msg) {
+            const existing = document.querySelector('.error-message');
+            if (existing) existing.remove();
 
-    function initializeChat() {
-      console.log('👤 Local user:', currentUser);
-      document.getElementById('userName').textContent = `Hi, ${currentUser.nickname}!`;
-      setupInputHandlers();
-      checkStatus();
-    }
+            const errDiv = document.createElement('div');
+            errDiv.className = 'error-message';
+            errDiv.textContent = msg;
 
-    window.addEventListener('load', initializeChat);
-  </script>
+            const chat = document.getElementById('chatMessages');
+            chat.appendChild(errDiv);
+
+            setTimeout(() => {
+                if (errDiv.parentNode) errDiv.remove();
+            }, 5000);
+        }
+
+        async function initializeChat() {
+            console.log('👤 Local user:', currentUser);
+            document.getElementById('userName').textContent = `Hi, ${currentUser.nickname}!`;
+            await fetchConfig(); // Fetch WIX_BASE_URL before setting up
+            setupInputHandlers();
+            checkStatus();
+        }
+
+        window.addEventListener('load', initializeChat);
+    </script>
 </body>
 </html>
