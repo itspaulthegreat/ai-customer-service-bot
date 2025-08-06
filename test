@@ -4,4 +4,4 @@ Managed full implementation lifecycles including architecture design, requiremen
 Led global SAP S/4HANA rollouts across procurement, finance, production, and logistics domains, delivering 25+ reusable interfaces and reducing development time by 30%.
 Built global KPI dashboards using Power BI, Tableau, Spotfire, and SAP Analytics Cloud to track finance, HR, infrastructure, procurement, and supply chain metrics.
 Created service growth scorecards with industry insights in Tableau and Power BI using SnapLogic and Snowflake, ensuring accurate YOY and YTD performance analysis.
-Built real-time middleware integrations between SAP and Salesforce using SAP CPI, MuleSoft, Dell Boomi, SnapLogic, and Rest/Soap, handling 100K+ transactions/month with <0.5% error.
+Built real-time middleware integrations between SAP and Salesforce using SAP CPI, MuleSoft, Dell Boomi, and SnapLogic, handling 100K+ transactions/month with <0.5% error.
