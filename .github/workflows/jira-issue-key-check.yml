@@ -19,7 +19,10 @@ jobs:
       - name: Validate PR branch name
         run: |
           echo "🔍 Checking branch name: ${{ github.head_ref }}"
-          if ! [[ "${{ github.head_ref }}" =~ ^AA-[0-9]+ ]]; then
+          # Skip validation for main, Validation-Branch, and production
+          if [[ "${{ github.head_ref }}" == "main" || "${{ github.head_ref }}" == "Validation-Branch" || "${{ github.head_ref }}" == "production" ]]; then
+            echo "✅ Branch '${{ github.head_ref }}' is exempt from Jira key validation"
+          elif ! [[ "${{ github.head_ref }}" =~ ^AA-[0-9]+ ]]; then
             echo "❌ Branch name must start with a Jira issue key from project 'AA' (e.g., AA-123)"
             exit 1
           fi
