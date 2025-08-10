@@ -8,7 +8,7 @@ import wixUsers from 'wix-users';
 import wixLocationFrontend from 'wix-location-frontend';
 import { getUserOrderItems } from 'backend/orderService.jsw';
 import wixData from 'wix-data';
-import { getUserProductOrderReview, submitReview } from 'backend/reviews.web';
+import { getUserProductOrderReview, submitReview, submitRating } from 'backend/reviews.web';
 
 const user = wixUsers.currentUser;
 const userId = user.loggedIn ? user.id : null;
@@ -39,6 +39,7 @@ function formatDeliveryDate(isoDate) {
 }
 
 $w.onReady(async function () {
+    console.log("meowww",$w("#text89").html)
     await initializeProfile();
     let routerData = wixWindowFrontend.getRouterData();
     console.log("Account page loaded with router data:", routerData);
@@ -398,7 +399,7 @@ async function setupOrdersManagement() {
         $w('#ordersRepeater').onItemReady(($item, itemData) => {
             // Set basic item data
             $item('#sizeText').text = itemData.size;
-            $item('#orderId').text = itemData.displayOrderId; // Use displayOrderId for display
+            // $item('#orderId').text = itemData.displayOrderId; // Use displayOrderId for display
             $item('#quantityText').text = itemData.quantity.toString();
             $item('#shipmentStatusText').text = itemData.shipmentStatus;
             $item('#orderDateText').text = `On, ${itemData.formattedDate}`;
@@ -418,17 +419,16 @@ async function setupOrdersManagement() {
                 $item('#ratingStack').expand();
 
                 // Fetch existing review for this user, product, and order
-                console.log(userId,itemData.catalogItemId,  itemData.displayOrderId)
-                getUserProductOrderReview(userId, itemData.catalogItemId, itemData.displayOrderId)
+                console.log(userId, itemData.catalogItemId, itemData.orderId);
+                getUserProductOrderReview(userId, itemData.catalogItemId, itemData.orderId)
                     .then((result) => {
-                        console.log("results",result)
-                        if (result.success) {
-                            // Existing non-rejected review found, set the rating
-                            console.log("sexxxxx")
+                        console.log("results", result);
+                        if (result.success && result.review) {
+                            // Existing review with rating found, set the rating
                             $item('#ratingsInputDesktop').value = Number(result.review.rating);
-                            console.log(`[onItemReady] Set rating to ${result.review.rating} for order ${itemData.displayOrderId}`);
+                            console.log(`[onItemReady] Set rating to ${result.review.rating} for order ${itemData.orderId}`);
                         } else {
-                            // No review, rejected review, or error - keep ratingsInputDesktop empty
+                            // No review or no rating, keep ratingsInputDesktop empty
                             $item('#ratingsInputDesktop').value = null;
                             console.log(`[onItemReady] No valid review found for order ${itemData.displayOrderId}`);
                         }
@@ -442,26 +442,23 @@ async function setupOrdersManagement() {
                 $item('#ratingsInputDesktop').onChange((event) => {
                     const newRating = parseInt(event.target.value);
                     console.log(`[ratingsInputDesktop.onChange] New rating ${newRating} for order ${itemData.displayOrderId}`);
-                    console.log('[ratingsInputDesktop.onChange] Submitting review with:', {
+                    console.log('[ratingsInputDesktop.onChange] Submitting rating with using submit rating:', {
                         userId: userId,
                         orderId: itemData.orderId,
                         productId: itemData.catalogItemId,
                         rating: newRating
                     });
 
-                    // Validate and submit review
-                    submitReview({
-                        userId: userId,
-                        orderId: itemData.orderId,
-                        productId: itemData.catalogItemId,
-                        rating: newRating,
-                        reviewText: '',
-                        imageUrl: '',
-                        customerName: 'Anonymous'
-                    })
+                    // Validate and submit rating
+                    submitRating({
+                            userId: userId,
+                            orderId: itemData.orderId,
+                            productId: itemData.catalogItemId,
+                            rating: newRating
+                        })
                         .then((result) => {
                             if (result.success) {
-                                console.log(`[ratingsInputDesktop.onChange] Review submitted successfully for order ${itemData.displayOrderId}`);
+                                console.log(`[ratingsInputDesktop.onChange] Rating submitted successfully for order ${itemData.displayOrderId}`);
                                 MessageHandler.showMessage({
                                     message: result.message,
                                     type: 'success'
@@ -469,7 +466,7 @@ async function setupOrdersManagement() {
                                 // Update the rating input to reflect the submitted value
                                 $item('#ratingsInputDesktop').value = Number(newRating);
                             } else {
-                                console.error(`[ratingsInputDesktop.onChange] Error submitting review: ${result.message}`);
+                                console.error(`[ratingsInputDesktop.onChange] Error submitting rating: ${result.message}`);
                                 MessageHandler.showMessage({
                                     message: result.message,
                                     type: 'error'
@@ -479,7 +476,7 @@ async function setupOrdersManagement() {
                             }
                         })
                         .catch((error) => {
-                            console.error(`[ratingsInputDesktop.onChange] Error submitting review for order ${itemData.displayOrderId}:`, error);
+                            console.error(`[ratingsInputDesktop.onChange] Error submitting rating for order ${itemData.displayOrderId}:`, error);
                             MessageHandler.showMessage({
                                 message: "Failed to submit rating. Please try again.",
                                 type: 'error'
@@ -583,13 +580,11 @@ async function loadOrdersPage(append = false) {
                 console.log(`[loadOrdersPage] No product data found for ${item.catalogItemId}`);
             }
 
-            // Split orderId into actual orderId and displayOrderId
-            const parts = item.orderId.split('_');
-            const actualOrderId = parts.length >= 3 ? parts[1] : item.orderId; // Extract order._id, fallback to full ID if format is unexpected
+            // Use the orderId and displayOrderId directly from backend
             const orderItem = {
                 _id: item.originalItemId,
-                orderId: actualOrderId, // Actual orderId for backend operations
-                displayOrderId: item.orderId, // Composite ID for display
+                orderId: item.orderId, // Actual orderId for backend operations
+                displayOrderId: item.displayOrderId, // Composite ID for display
                 price: item.price || 0,
                 size: item.size,
                 quantity: item.quantity || 1,
@@ -656,3 +651,27 @@ function updatePaginationButtons() {
         console.log('[updatePaginationButtons] Next button enabled');
     }
 }
+
+let profileEditState = false;
+
+$w('#vectorImage31').onClick(() => {
+    if (!profileEditState) {
+        profileEditState = true;
+        $w("#profileName").collapse();
+        $w("#prodileNameHeader").collapse();
+        $w("#input1").expand();
+        
+        setTimeout(() => {
+            $w("#input1").focus();
+        }, 100);
+    }
+});
+
+$w('#input1').onBlur(() => {
+    setTimeout(() => {
+        profileEditState = false;
+        $w("#input1").collapse();
+        $w("#prodileNameHeader").expand();
+        $w("#profileName").expand();
+    }, 150);
+});
