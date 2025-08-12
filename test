@@ -1,677 +1,342 @@
-import wixWindowFrontend from 'wix-window-frontend';
-import wixWindow from 'wix-window';
-import { getUserAddresses, addUserAddress, updateUserAddress, deleteUserAddress } from 'backend/address.jsw';
-import { getStateFromPincode } from 'public/utils.js';
-import { CONSTANTS } from 'public/constants';
-import { MessageHandler } from 'public/utils.js';
-import wixUsers from 'wix-users';
-import wixLocationFrontend from 'wix-location-frontend';
-import { getUserOrderItems } from 'backend/orderService.jsw';
-import wixData from 'wix-data';
-import { getUserProductOrderReview, submitReview, submitRating } from 'backend/reviews.web';
+import { Permissions, webMethod } from "wix-web-module";
+import wixData from "wix-data";
+import { CONSTANTS } from "public/constants";
 
-const user = wixUsers.currentUser;
-const userId = user.loggedIn ? user.id : null;
-const SELECTED_COLOR = 'rgb(121, 76, 234)';
-const DESELECTED_COLOR = 'rgb(255, 255, 255)';
-const BORDER_WIDTH = '2px';
-let currentOrdersPage = 0;
-let isLoadingOrders = false;
-let hasMoreOrders = true;
-const ORDERS_PER_PAGE = 5;
-
-// Helper function to format date to "26th July 2025"
-function formatDeliveryDate(isoDate) {
+export const submitReview = webMethod(Permissions.SiteMember, async (reviewData) => {
     try {
-        const date = new Date(isoDate);
-        const day = date.getDate();
-        const month = date.toLocaleString('en-IN', { month: 'long' });
-        const year = date.getFullYear();
-        // Add ordinal suffix (st, nd, rd, th)
-        const suffix = (day % 10 === 1 && day !== 11) ? 'st' :
-            (day % 10 === 2 && day !== 12) ? 'nd' :
-            (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
-        return `${day}${suffix} ${month} ${year}`;
-    } catch (error) {
-        console.error('Error formatting date:', error);
-        return 'N/A';
-    }
-}
+        const { userId, orderId, productId, reviewText, imageUrl, customerName } = reviewData;
 
-$w.onReady(async function () {
-    console.log("meowww",$w("#text89").html)
-    await initializeProfile();
-    let routerData = wixWindowFrontend.getRouterData();
-    console.log("Account page loaded with router data:", routerData);
-
-    // Check if the section is address
-    if (routerData && routerData.section === "address") {
-        console.log("address");
-        await setupAddressManagement();
-    } else if (routerData && routerData.section === "orders") {
-        console.log("orders");
-        await setupOrdersManagement();
-    }
-
-    $w('#addressStateButton').onClick(() => {
-        // Navigate to the address section of the account page
-        wixLocationFrontend.to('/account/address');
-        console.log('Navigating to address section');
-    });
-
-    $w('#ordersStateButton').onClick(() => {
-        // Navigate to the orders section of the account page
-        wixLocationFrontend.to('/account/orders');
-        console.log('Navigating to orders section');
-    });
-
-    console.log($w("#textAddress").html);
-});
-
-async function initializeProfile() {
-    if (!userId) {
-        MessageHandler.showMessage({
-            message: "Please log in to manage your addresses.",
-            type: 'error'
-        });
-        wixLocationFrontend.to('/signup');
-    }
-}
-
-async function setupAddressManagement() {
-    let selectedAddressId = null;
-    let addresses = [];
-
-    // Load addresses function
-    async function loadAddresses() {
-        try {
-            addresses = await getUserAddresses(userId);
-            const repeaterData = addresses.filter(addr => !addr.isTemporary).map(addr => ({
-                ...addr,
-                _id: addr._id,
-                nameText: addr.name || addr.defaultName || '',
-                fullText: addr.fullAddress.length > CONSTANTS.ADDRESS_TEXT_LIMIT ?
-                    addr.fullAddress.substring(0, CONSTANTS.ADDRESS_TEXT_LIMIT) + '...' : addr.fullAddress,
-                streetText: addr.streetName && addr.streetName.length > CONSTANTS.ADDRESS_TEXT_LIMIT ?
-                    addr.streetName.substring(0, CONSTANTS.ADDRESS_TEXT_LIMIT) + '...' : addr.streetName || '',
-                apartmentText: addr.apartmentHouse || '',
-                landmarkText: addr.landmark && addr.landmark.length > CONSTANTS.ADDRESS_TEXT_LIMIT ?
-                    addr.landmark.substring(0, CONSTANTS.ADDRESS_TEXT_LIMIT) + '...' : addr.landmark || '',
-                pincodeText: addr.pincode,
-                stateText: addr.state,
-                cityText: addr.cityArea
-            }));
-
-            $w('#addressRepeater').data = repeaterData;
-
-            if (addresses.length === 0) {
-                $w('#addressRepeater').hide();
-                $w('#noAddressesText').show();
-            } else {
-                $w('#addressRepeater').show();
-                $w('#noAddressesText').hide();
-
-                $w('#addressRepeater').forEachItem(($item, itemData) => {
-                    $item('#addressNameText').text = itemData.nameText;
-                    $item('#addressFullText').text = itemData.fullText;
-                    $item('#addressStreetText').text = itemData.streetText;
-                    $item('#addressApartmentText').text = itemData.apartmentText;
-                    $item('#addressLandmarkText').text = itemData.landmarkText;
-                    $item('#addressPincodeText').text = itemData.pincodeText;
-                    $item('#addressStateText').text = itemData.stateText;
-                    $item('#addressCityText').text = itemData.cityText;
-                });
-            }
-            updateDeleteButtonState();
-            console.log('Addresses loaded:', addresses);
-        } catch (error) {
-            console.error('Error loading addresses:', error);
-            MessageHandler.showMessage({
-                message: "Failed to load addresses. Please try again.",
-                type: 'error'
-            });
+        // Validate inputs
+        if (!userId || !orderId || !productId) {
+            throw new Error("Missing required fields: userId, orderId, or productId.");
         }
-    }
 
-    // Update delete button state
-    function updateDeleteButtonState() {
-        if (addresses.length === 0 || !selectedAddressId) {
-            $w('#deleteButton').disable();
-        } else {
-            $w('#deleteButton').enable();
+        if (reviewText && reviewText.length > CONSTANTS.REVIEWS.MAX_REVIEW_LENGTH) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_TEXT_TOO_LONG);
         }
-    }
 
-    // Update address selection UI
-    function updateAddressSelection() {
-        $w('#addressRepeater').forEachItem(($i, iData) => {
-            $i('#addressButton').style.borderColor = iData._id === selectedAddressId ? SELECTED_COLOR : DESELECTED_COLOR;
-            $i('#addressButton').style.borderWidth = iData._id === selectedAddressId ? BORDER_WIDTH : BORDER_WIDTH;
-        });
-        updateDeleteButtonState();
-    }
-
-    // Repeater setup
-    $w('#addressRepeater').onItemReady(($item, itemData) => {
-        $item('#addressNameText').text = itemData.nameText;
-        $item('#addressFullText').text = itemData.fullText;
-        $item('#addressStreetText').text = itemData.streetText;
-        $item('#addressApartmentText').text = itemData.apartmentText;
-        $item('#addressLandmarkText').text = itemData.landmarkText;
-        $item('#addressPincodeText').text = itemData.pincodeText;
-        $item('#addressStateText').text = itemData.stateText;
-        $item('#addressCityText').text = itemData.cityText;
-
-        $item('#addressButton').onClick(() => {
-            selectedAddressId = itemData._id;
-            updateAddressSelection();
-            console.log('Address selected, ID:', selectedAddressId);
-        });
-
-        $item('#editButton').onClick(async () => {
-            $w('#multiStateBox').changeState('editAddressState');
-            const address = addresses.find(addr => addr._id === itemData._id);
-
-            $w('#editFullAddress').value = address.fullAddress;
-            $w('#editStreetName').value = address.streetName;
-            $w('#editApartmentHouse').value = address.apartmentHouse;
-            $w('#editLandmark').value = address.landmark;
-            $w('#editPincode').value = address.pincode;
-            $w('#editState').value = address.state;
-            $w('#editCityArea').value = address.cityArea;
-            $w('#editName').value = address.name || address.defaultName || '';
-            $w('#useDefaultNameCheckbox').checked = !address.name || address.name === address.defaultName;
-            $w('#makeDefaultCheckbox').checked = address.isDefault;
-
-            if (address.isDefault) {
-                $w('#makeDefaultCheckbox').disable();
-            } else {
-                $w('#makeDefaultCheckbox').enable();
-            }
-
-            toggleNameInput();
-            selectedAddressId = address._id;
-            $w('#saveAddressButton').disable();
-            await loadAddresses();
-        });
-    });
-
-    // Delete button (outside repeater) - opens confirmation lightbox
-    $w('#deleteButton').onClick(() => {
-        if (selectedAddressId) {
-            wixWindow.openLightbox('ConfirmDeleteAddress', { addressId: selectedAddressId })
-                .then(async (result) => {
-                    if (result && result.confirmed) {
-                        try {
-                            await deleteUserAddress(selectedAddressId);
-                            selectedAddressId = null;
-                            await loadAddresses();
-                            MessageHandler.showMessage({
-                                message: "Address deleted successfully.",
-                                type: 'success'
-                            });
-                            console.log('Address deleted, ID:', result.addressId);
-                        } catch (error) {
-                            console.error('Error deleting address:', error);
-                            MessageHandler.showMessage({
-                                message: "Failed to delete address. Please try again.",
-                                type: 'error'
-                            });
-                        }
-                    }
-                });
-            console.log('Opened ConfirmDeleteAddress lightbox for address ID:', selectedAddressId);
+        if (!reviewText && !imageUrl) {
+            throw new Error("Must provide at least review text or image.");
         }
-    });
 
-    // Add new address
-    $w('#addNewAddressButton').onClick(() => {
-        $w('#multiStateBox').changeState('editAddressState');
-        $w('#editFullAddress').value = '';
-        $w('#editStreetName').value = '';
-        $w('#editApartmentHouse').value = '';
-        $w('#editLandmark').value = '';
-        $w('#editPincode').value = '';
-        $w('#editState').value = '';
-        $w('#editCityArea').value = '';
-        $w('#editName').value = addresses[0]?.defaultName || '';
-        $w('#useDefaultNameCheckbox').checked = true;
-        $w('#makeDefaultCheckbox').checked = false;
-        $w('#makeDefaultCheckbox').enable();
-        toggleNameInput();
-        selectedAddressId = null;
-        $w('#saveAddressButton').disable();
-        $w('#deleteButton').disable();
-        loadAddresses();
-    });
+        // Validate order
+        const orderResult = await wixData.query("Orders")
+            .eq("_id", orderId)
+            .eq("userId", userId)
+            .eq("status", "Paid")
+            .find();
 
-    // Handle default name checkbox
-    $w('#useDefaultNameCheckbox').onChange(() => {
-        toggleNameInput();
-    });
-
-    function toggleNameInput() {
-        if ($w('#useDefaultNameCheckbox').checked) {
-            $w('#editName').value = addresses[0]?.defaultName || '';
-            $w('#editName').disable();
-        } else {
-            $w('#editName').enable();
-            $w('#editName').value = '';
+        if (orderResult.items.length === 0) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_NO_ORDER);
         }
-    }
 
-    // Auto-fill state from pincode
-    $w('#editPincode').onInput(async () => {
-        const pincode = $w('#editPincode').value;
-        const pincodeRegex = /^[0-9]{6}$/;
-
-        if (pincodeRegex.test(pincode)) {
-            try {
-                const state = await getStateFromPincode(pincode);
-                if (state && CONSTANTS.INDIAN_STATES.some(s => s.value === state)) {
-                    $w('#editState').value = state;
-                } else {
-                    $w('#editState').value = '';
-                    console.log('Invalid pincode or state not found.');
-                }
-            } catch (error) {
-                console.error('Error fetching state for pincode:', error);
-                $w('#editState').value = '';
-                console.log('Failed to fetch state for pincode.');
-            }
-        } else {
-            $w('#editState').value = '';
+        const order = orderResult.items[0];
+        const hasProduct = order.products.some(item => item.catalogItemId === productId);
+        if (!hasProduct) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_NO_ORDER);
         }
-    });
 
-    // Enable save button on change
-    ['#editFullAddress', '#editStreetName', '#editApartmentHouse', '#editLandmark', '#editPincode', '#editState', '#editCityArea', '#editName', '#makeDefaultCheckbox'].forEach(selector => {
-        $w(selector).onChange(() => {
-            $w('#saveAddressButton').enable();
-        });
-    });
+        // Check shipment status
+        const orderItemResult = await wixData.query(CONSTANTS.COLLECTIONS.ORDER_ITEMS)
+            .eq("orderId", orderId)
+            .eq("catalogItemId", productId)
+            .eq("shipmentStatus", "Delivered")
+            .find();
 
-    // Save address
-    $w('#saveAddressButton').onClick(async () => {
-        const addressData = {
-            name: $w('#useDefaultNameCheckbox').checked ? (addresses[0]?.defaultName || '') : $w('#editName').value,
-            fullAddress: $w('#editFullAddress').value,
-            streetName: $w('#editStreetName').value,
-            apartmentHouse: $w('#editApartmentHouse').value,
-            landmark: $w('#editLandmark').value,
-            pincode: $w('#editPincode').value,
-            state: $w('#editState').value,
-            cityArea: $w('#editCityArea').value,
-            explicitlySetAsDefault: $w('#makeDefaultCheckbox').checked
+        if (orderItemResult.items.length === 0) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_NOT_DELIVERED);
+        }
+
+        // Check for existing review
+        const existingReview = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("orderId", orderId)
+            .eq("productId", productId)
+            .find();
+
+        if (existingReview.items.length > 0 && existingReview.items[0].status !== CONSTANTS.REVIEWS.STATUSES.REJECTED) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_ALREADY_SUBMITTED);
+        }
+
+        // Prepare review data (no rating)
+        const review = {
+            userId,
+            orderId,
+            productId,
+            reviewText: reviewText || "",
+            imageUrl: imageUrl || "",
+            status: CONSTANTS.REVIEWS.STATUSES.PENDING,
+            customerName: customerName || "Anonymous"
         };
 
-        if (!addressData.fullAddress || !addressData.pincode || !addressData.state ||
-            !CONSTANTS.INDIAN_STATES.some(s => s.value === addressData.state) || !addressData.cityArea) {
-            MessageHandler.showMessage({
-                message: "Please fill all required address fields, including a valid state.",
-                type: 'error'
-            });
-            return;
-        }
-
-        try {
-            let savedAddress;
-            if (selectedAddressId) {
-                savedAddress = await updateUserAddress(selectedAddressId, addressData);
-                MessageHandler.showMessage({
-                    message: "Address updated successfully.",
-                    type: 'success'
-                });
-                console.log('Address updated successfully');
-            } else {
-                savedAddress = await addUserAddress(userId, addressData);
-                MessageHandler.showMessage({
-                    message: "Address added successfully.",
-                    type: 'success'
-                });
-                console.log('Address added successfully');
+        // Insert or update review, preserving rating if exists
+        if (existingReview.items.length > 0) {
+            review._id = existingReview.items[0]._id;
+            if (existingReview.items[0].rating) {
+                review.rating = existingReview.items[0].rating;
             }
-
-            selectedAddressId = savedAddress._id;
-            await loadAddresses();
-
-            $w('#multiStateBox').changeState('selectState').then(() => {
-                console.log('State changed to selectState');
-                updateAddressSelection();
-            }).catch(err => {
-                console.error('State change error:', err);
-                let attempts = 0;
-                const maxAttempts = 3;
-
-                function tryChangeState() {
-                    if (attempts >= maxAttempts) {
-                        console.error('Failed to change state after', maxAttempts, 'attempts');
-                        return;
-                    }
-                    attempts++;
-                    setTimeout(() => {
-                        $w('#multiStateBox').changeState('selectState').then(() => {
-                            console.log('Fallback state change successful, attempt', attempts);
-                            updateAddressSelection();
-                        }).catch(() => tryChangeState());
-                    }, 200 * attempts);
-                }
-                tryChangeState();
-            });
-
-            console.log('Saved address:', savedAddress);
-        } catch (error) {
-            console.error('Error saving address:', error);
-            MessageHandler.showMessage({
-                message: error.message || "Failed to save address. Please try again.",
-                type: 'error'
-            });
-        }
-    });
-
-    // Cancel edit
-    $w('#cancelEditButton').onClick(() => {
-        $w('#multiStateBox').changeState('selectState');
-        selectedAddressId = null;
-        $w('#deleteButton').disable();
-        loadAddresses();
-    });
-
-    // Initialize
-    await loadAddresses();
-    $w('#editState').options = CONSTANTS.INDIAN_STATES;
-    $w('#multiStateBox').changeState('selectState');
-}
-
-async function setupOrdersManagement() {
-    try {
-        // Set the multiStateBox to show the orders state
-        $w('#multiStateBox').changeState('ordersState');
-
-        // Reset pagination variables
-        currentOrdersPage = 0;
-        hasMoreOrders = true;
-        isLoadingOrders = false;
-
-        console.log('[setupOrdersManagement] Initializing orders section, userId:', userId);
-
-        // Setup repeater
-        $w('#ordersRepeater').onItemReady(($item, itemData) => {
-            // Set basic item data
-            $item('#sizeText').text = itemData.size;
-            // $item('#orderId').text = itemData.displayOrderId; // Use displayOrderId for display
-            $item('#quantityText').text = itemData.quantity.toString();
-            $item('#shipmentStatusText').text = itemData.shipmentStatus;
-            $item('#orderDateText').text = `On, ${itemData.formattedDate}`;
-            $item('#brandNameText').text = itemData.brandName;
-            $item('#productNameText').text = itemData.productName;
-
-            // Set product image if available
-            if (itemData.productImage) {
-                $item('#productImage').src = itemData.productImage;
-            }
-
-            // Handle review for delivered items
-            if (itemData.shipmentStatus === 'Delivered') {
-                console.log(`[onItemReady] Item ${itemData.displayOrderId} is delivered, fetching review`);
-                // Item is delivered - show rating, hide delivery expectation
-                $item('#deliveryExpectedContainer').collapse();
-                $item('#ratingStack').expand();
-
-                // Fetch existing review for this user, product, and order
-                console.log(userId, itemData.catalogItemId, itemData.orderId);
-                getUserProductOrderReview(userId, itemData.catalogItemId, itemData.orderId)
-                    .then((result) => {
-                        console.log("results", result);
-                        if (result.success && result.review) {
-                            // Existing review with rating found, set the rating
-                            $item('#ratingsInputDesktop').value = Number(result.review.rating);
-                            console.log(`[onItemReady] Set rating to ${result.review.rating} for order ${itemData.orderId}`);
-                        } else {
-                            // No review or no rating, keep ratingsInputDesktop empty
-                            $item('#ratingsInputDesktop').value = null;
-                            console.log(`[onItemReady] No valid review found for order ${itemData.displayOrderId}`);
-                        }
-                    })
-                    .catch((error) => {
-                        console.error(`[onItemReady] Error fetching review for order ${itemData.displayOrderId}:`, error);
-                        $item('#ratingsInputDesktop').value = null;
-                    });
-
-                // Handle rating submission
-                $item('#ratingsInputDesktop').onChange((event) => {
-                    const newRating = parseInt(event.target.value);
-                    console.log(`[ratingsInputDesktop.onChange] New rating ${newRating} for order ${itemData.displayOrderId}`);
-                    console.log('[ratingsInputDesktop.onChange] Submitting rating with using submit rating:', {
-                        userId: userId,
-                        orderId: itemData.orderId,
-                        productId: itemData.catalogItemId,
-                        rating: newRating
-                    });
-
-                    // Validate and submit rating
-                    submitRating({
-                            userId: userId,
-                            orderId: itemData.orderId,
-                            productId: itemData.catalogItemId,
-                            rating: newRating
-                        })
-                        .then((result) => {
-                            if (result.success) {
-                                console.log(`[ratingsInputDesktop.onChange] Rating submitted successfully for order ${itemData.displayOrderId}`);
-                                MessageHandler.showMessage({
-                                    message: result.message,
-                                    type: 'success'
-                                });
-                                // Update the rating input to reflect the submitted value
-                                $item('#ratingsInputDesktop').value = Number(newRating);
-                            } else {
-                                console.error(`[ratingsInputDesktop.onChange] Error submitting rating: ${result.message}`);
-                                MessageHandler.showMessage({
-                                    message: result.message,
-                                    type: 'error'
-                                });
-                                // Revert rating input if submission fails
-                                $item('#ratingsInputDesktop').value = null;
-                            }
-                        })
-                        .catch((error) => {
-                            console.error(`[ratingsInputDesktop.onChange] Error submitting rating for order ${itemData.displayOrderId}:`, error);
-                            MessageHandler.showMessage({
-                                message: "Failed to submit rating. Please try again.",
-                                type: 'error'
-                            });
-                            $item('#ratingsInputDesktop').value = null;
-                        });
-                });
-            } else {
-                console.log(`[onItemReady] Item ${itemData.displayOrderId} is not delivered, hiding rating`);
-                // Item is not delivered - hide rating, show delivery expectation
-                $item('#ratingStack').collapse();
-                $item('#deliveryExpectedContainer').expand();
-
-                // Set delivery date text
-                $item('#deliveryDate').text = itemData.estimatedDeliveryDate ?
-                    formatDeliveryDate(itemData.estimatedDeliveryDate) : 'N/A';
-            }
-        });
-
-        // Setup pagination buttons
-        $w('#nextOrdersButton').onClick(async () => {
-            console.log('[nextOrdersButton] Clicked - currentPage:', currentOrdersPage, 'hasMoreOrders:', hasMoreOrders, 'isLoading:', isLoadingOrders);
-            if (!isLoadingOrders && hasMoreOrders) {
-                currentOrdersPage++;
-                console.log('[nextOrdersButton] Moving to page:', currentOrdersPage);
-                await loadOrdersPage(false);
-            }
-        });
-
-        $w('#prevOrdersButton').onClick(async () => {
-            console.log('[prevOrdersButton] Clicked - currentPage:', currentOrdersPage, 'isLoading:', isLoadingOrders);
-            if (!isLoadingOrders && currentOrdersPage > 0) {
-                currentOrdersPage--;
-                console.log('[prevOrdersButton] Moving to page:', currentOrdersPage);
-                await loadOrdersPage(false);
-            }
-        });
-
-        // Load first page of orders
-        await loadOrdersPage(false);
-
-        console.log('[setupOrdersManagement] Orders section initialized');
-    } catch (error) {
-        console.error('[setupOrdersManagement] Error setting up orders management:', error);
-        MessageHandler.showMessage({
-            message: "Failed to initialize orders section. Please try again.",
-            type: 'error'
-        });
-    }
-}
-
-async function loadOrdersPage(append = false) {
-    if (isLoadingOrders) {
-        console.log('[loadOrdersPage] Already loading, skipping...');
-        return;
-    }
-
-    isLoadingOrders = true;
-    console.log(`[loadOrdersPage] Starting - page: ${currentOrdersPage}, append: ${append}, offset: ${currentOrdersPage * ORDERS_PER_PAGE}`);
-
-    try {
-        const result = await getUserOrderItems(userId, {
-            limit: ORDERS_PER_PAGE,
-            offset: currentOrdersPage * ORDERS_PER_PAGE,
-            sortBy: '_createdDate',
-            sortOrder: 'desc'
-        });
-
-        console.log('[loadOrdersPage] API Response:', {
-            success: result.success,
-            totalItems: result.context?.totalItems || 0,
-            totalAvailable: result.context?.totalAvailable || 0,
-            hasMore: result.context?.hasMore || false,
-            currentPage: result.context?.pagination?.currentPage || 0,
-            totalPages: result.context?.pagination?.totalPages || 0
-        });
-
-        if (!result.success) {
-            throw new Error(result.error || 'Failed to load order items');
-        }
-
-        hasMoreOrders = result.context?.hasMore || false;
-        console.log('[loadOrdersPage] Updated hasMoreOrders:', hasMoreOrders);
-
-        const orderItems = [];
-
-        console.log('[loadOrdersPage] Processing', result.metric_value.length, 'order items');
-
-        for (const [itemIndex, item] of result.metric_value.entries()) {
-            console.log(`[loadOrdersPage] Processing item ${itemIndex + 1}/${result.metric_value.length}: ${item.catalogItemId}`);
-
-            const productResult = await wixData.query('allProducts')
-                .eq('_id', item.catalogItemId)
-                .find();
-
-            let productData = null;
-            if (productResult.items.length > 0) {
-                productData = productResult.items[0];
-                console.log(`[loadOrdersPage] Found product data for ${item.catalogItemId}:`, productData.name);
-            } else {
-                console.log(`[loadOrdersPage] No product data found for ${item.catalogItemId}`);
-            }
-
-            // Use the orderId and displayOrderId directly from backend
-            const orderItem = {
-                _id: item.originalItemId,
-                orderId: item.orderId, // Actual orderId for backend operations
-                displayOrderId: item.displayOrderId, // Composite ID for display
-                price: item.price || 0,
-                size: item.size,
-                quantity: item.quantity || 1,
-                shipmentStatus: item.shipmentStatus || 'Processing',
-                estimatedDeliveryDate: item.estimatedDeliveryDate || null,
-                formattedDate: item.formattedDate,
-                brandName: productData ? (productData.brandName || 'Unknown Brand') : 'Unknown Brand',
-                productName: productData ? (productData.name || item.name) : (item.name || 'Unknown Product'),
-                productImage: productData ? productData.mainMedia : '',
-                catalogItemId: item.catalogItemId
-            };
-
-            orderItems.push(orderItem);
-            console.log(`[loadOrdersPage] Added order item with ID: ${orderItem._id}, displayOrderId: ${orderItem.displayOrderId}, orderId: ${orderItem.orderId}, status: ${orderItem.shipmentStatus}`);
-        }
-
-        console.log(`[loadOrdersPage] Total order items created: ${orderItems.length}`);
-        console.log('[loadOrdersPage] Order item IDs and statuses:', orderItems.map(item => `${item._id}:${item.shipmentStatus}`));
-
-        $w('#ordersRepeater').data = orderItems;
-        console.log(`[loadOrdersPage] Repeater data updated with ${orderItems.length} items`);
-
-        if (orderItems.length === 0) {
-            $w('#ordersRepeater').hide();
-            $w('#noOrdersText').show();
-            console.log('[loadOrdersPage] No orders found, showing no orders message');
+            await wixData.update(CONSTANTS.COLLECTIONS.REVIEWS, review);
         } else {
-            $w('#ordersRepeater').show();
-            $w('#noOrdersText').hide();
-            console.log('[loadOrdersPage] Orders found, showing repeater');
+            await wixData.insert(CONSTANTS.COLLECTIONS.REVIEWS, review);
         }
 
-        updatePaginationButtons();
-
-        console.log(`[loadOrdersPage] Page ${currentOrdersPage} loaded successfully with ${orderItems.length} items`);
+        return { success: true, message: "Review submitted successfully." };
     } catch (error) {
-        console.error('[loadOrdersPage] Error loading orders:', error);
-        MessageHandler.showMessage({
-            message: "Failed to load orders. Please try again.",
-            type: 'error'
-        });
-    } finally {
-        isLoadingOrders = false;
-        console.log('[loadOrdersPage] Loading completed, isLoadingOrders set to false');
-    }
-}
-
-function updatePaginationButtons() {
-    console.log('[updatePaginationButtons] currentPage:', currentOrdersPage, 'hasMoreOrders:', hasMoreOrders);
-
-    if (currentOrdersPage <= 0) {
-        $w('#prevOrdersButton').disable();
-        console.log('[updatePaginationButtons] Prev button disabled (first page)');
-    } else {
-        $w('#prevOrdersButton').enable();
-        console.log('[updatePaginationButtons] Prev button enabled');
-    }
-
-    if (!hasMoreOrders) {
-        $w('#nextOrdersButton').disable();
-        console.log('[updatePaginationButtons] Next button disabled (no more orders)');
-    } else {
-        $w('#nextOrdersButton').enable();
-        console.log('[updatePaginationButtons] Next button enabled');
-    }
-}
-
-let profileEditState = false;
-
-$w('#vectorImage31').onClick(() => {
-    if (!profileEditState) {
-        profileEditState = true;
-        $w("#profileName").collapse();
-        $w("#prodileNameHeader").collapse();
-        $w("#input1").expand();
-        
-        setTimeout(() => {
-            $w("#input1").focus();
-        }, 100);
+        console.error("Error submitting review:", error);
+        return { success: false, message: error.message };
     }
 });
 
-$w('#input1').onBlur(() => {
-    setTimeout(() => {
-        profileEditState = false;
-        $w("#input1").collapse();
-        $w("#prodileNameHeader").expand();
-        $w("#profileName").expand();
-    }, 150);
+export const submitRating = webMethod(Permissions.SiteMember, async (ratingData) => {
+    try {
+        const { userId, orderId, productId, rating } = ratingData;
+
+        // Validate inputs
+        if (!userId || !orderId || !productId) {
+            throw new Error("Missing required fields: userId, orderId, or productId.");
+        }
+
+        if (typeof rating !== "number" || rating < CONSTANTS.REVIEWS.RATING_MIN || rating > CONSTANTS.REVIEWS.RATING_MAX) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_INVALID_RATING);
+        }
+        console.log("all data for rating submite",orderId,userId)
+        // Validate order
+        const orderResult = await wixData.query("Orders")
+            .eq("_id", orderId)
+            .eq("userId", userId)
+            .eq("status", "Paid")
+            .find();
+    console.log("total order",orderResult)
+        if (orderResult.items.length === 0) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_NO_ORDER);
+        }
+
+        const order = orderResult.items[0];
+        const hasProduct = order.products.some(item => item.catalogItemId === productId);
+        if (!hasProduct) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_NO_ORDER);
+        }
+
+        // Check shipment status
+        const orderItemResult = await wixData.query(CONSTANTS.COLLECTIONS.ORDER_ITEMS)
+            .eq("orderId", orderId)
+            .eq("catalogItemId", productId)
+            .eq("shipmentStatus", "Delivered")
+            .find();
+
+        if (orderItemResult.items.length === 0) {
+            throw new Error(CONSTANTS.ERROR_MESSAGES.REVIEW_NOT_DELIVERED);
+        }
+
+        // Find existing review
+        const existingReview = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("orderId", orderId)
+            .eq("productId", productId)
+            .find();
+
+        let review;
+        if (existingReview.items.length > 0) {
+            review = existingReview.items[0];
+            review.rating = rating;
+            // Set status to approved only if no text or image
+            if (!review.reviewText && !review.imageUrl) {
+                review.status = CONSTANTS.REVIEWS.STATUSES.APPROVED;
+            }
+            // Otherwise, keep existing status (allows update without changing pending/rejected/approved)
+            await wixData.update(CONSTANTS.COLLECTIONS.REVIEWS, review);
+        } else {
+            review = {
+                userId,
+                orderId,
+                productId,
+                rating,
+                reviewText: "",
+                imageUrl: "",
+                status: CONSTANTS.REVIEWS.STATUSES.APPROVED,
+                customerName: "Anonymous"
+            };
+            await wixData.insert(CONSTANTS.COLLECTIONS.REVIEWS, review);
+        }
+
+        return { success: true, message: "Rating submitted successfully." };
+    } catch (error) {
+        console.error("Error submitting rating:", error);
+        return { success: false, message: error.message };
+    }
+});
+
+export const checkReviewEligibility = webMethod(Permissions.SiteMember, async (userId, productId) => {
+    try {
+        // Check for paid orders
+        const orderResult = await wixData.query("Orders")
+            .eq("userId", userId)
+            .eq("status", "Paid")
+            .find();
+
+        let matchingOrder = null;
+        let deliveredItem = null;
+
+        for (const order of orderResult.items) {
+            if (order.products.some(item => item.catalogItemId === productId)) {
+                const orderItemResult = await wixData.query(CONSTANTS.COLLECTIONS.ORDER_ITEMS)
+                    .eq("orderId", order._id)
+                    .eq("catalogItemId", productId)
+                    .eq("shipmentStatus", "Delivered")
+                    .find();
+
+                if (orderItemResult.items.length > 0) {
+                    matchingOrder = order;
+                    deliveredItem = orderItemResult.items[0];
+                    break;
+                }
+            }
+        }
+
+        if (!matchingOrder || !deliveredItem) {
+            return { canReview: false, reviewStatus: null, orderId: null };
+        }
+
+        // Check for existing review
+        const reviewResult = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("userId", userId)
+            .eq("productId", productId)
+            .eq("orderId", matchingOrder._id)
+            .find();
+
+        if (reviewResult.items.length > 0) {
+            const review = reviewResult.items[0];
+            return {
+                canReview: review.status === CONSTANTS.REVIEWS.STATUSES.REJECTED,
+                reviewStatus: review.status,
+                orderId: matchingOrder._id
+            };
+        }
+
+        return { canReview: true, reviewStatus: null, orderId: matchingOrder._id };
+    } catch (error) {
+        console.error("Error checking review eligibility:", error);
+        return { canReview: false, reviewStatus: null, orderId: null };
+    }
+});
+
+export const getRejectedReview = webMethod(Permissions.SiteMember, async (userId, productId, orderId) => {
+    try {
+        const reviewResult = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("userId", userId)
+            .eq("productId", productId)
+            .eq("orderId", orderId)
+            .eq("status", CONSTANTS.REVIEWS.STATUSES.REJECTED)
+            .find();
+
+        if (reviewResult.items.length > 0) {
+            return reviewResult.items[0];
+        }
+        return null;
+    } catch (error) {
+        console.error("Error fetching rejected review:", error);
+        return null;
+    }
+});
+
+export const getApprovedReviews = webMethod(Permissions.Anyone, async (productId, filter = "newest", limit = CONSTANTS.REVIEWS.PAGE_SIZE, skip = 0) => {
+    try {
+        let query = wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("productId", productId)
+            .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
+            .limit(limit)
+            .skip(skip);
+
+        switch (filter) {
+            case "highestRating":
+                query = query.descending("rating").descending("_createdDate");
+                break;
+            case "lowestRating":
+                query = query.ascending("rating").descending("_createdDate");
+                break;
+            case "newest":
+                query = query.descending("_createdDate");
+                break;
+            case "oldest":
+                query = query.ascending("_createdDate");
+                break;
+            default:
+                query = query.descending("_createdDate");
+        }
+
+        const result = await query.find();
+        return {
+            reviews: result.items,
+            hasNext: result.hasNext(),
+            totalCount: result.totalCount
+        };
+    } catch (error) {
+        console.error("Error fetching approved reviews:", error);
+        return { reviews: [], hasNext: false, totalCount: 0 };
+    }
+});
+
+export const getApprovedReviewsWithImages = webMethod(Permissions.Anyone, async (productId, filter = "newest", limit = CONSTANTS.REVIEWS.PAGE_SIZE, skip = 0) => {
+    try {
+        let query = wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("productId", productId)
+            .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
+            .ne("imageUrl", "") // Only reviews with images
+            .limit(limit)
+            .skip(skip);
+
+        switch (filter) {
+            case "highestRating":
+                query = query.descending("rating").descending("_createdDate");
+                break;
+            case "lowestRating":
+                query = query.ascending("rating").descending("_createdDate");
+                break;
+            case "newest":
+                query = query.descending("_createdDate");
+                break;
+            case "oldest":
+                query = query.ascending("_createdDate");
+                break;
+            default:
+                query = query.descending("_createdDate");
+        }
+
+        const result = await query.find();
+        return {
+            reviews: result.items,
+            hasNext: result.hasNext(),
+            totalCount: result.totalCount
+        };
+    } catch (error) {
+        console.error("Error fetching approved reviews with images:", error);
+        return { reviews: [], hasNext: false, totalCount: 0 };
+    }
+});
+
+export const getUserProductOrderReview = webMethod(Permissions.SiteMember, async (userId, productId, orderId) => {
+    try {
+        const reviewResult = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("userId", userId)
+            .eq("productId", productId)
+            .eq("orderId", orderId)
+            .find();
+        console.log("reviewResult",reviewResult)
+        if (reviewResult.items.length > 0) {
+            const review = reviewResult.items[0];
+            return {
+                success: true,
+                review: {
+                    rating: review.rating,
+                    status: review.status,
+                    reviewText: review.reviewText,
+                    imageUrl: review.imageUrl,
+                    customerName: review.customerName,
+                    _id: review._id
+                }
+            };
+        }
+        return { success: true, review: null };
+    } catch (error) {
+        console.error("Error fetching user product order review:", error);
+        return { success: false, review: null, message: error.message };
+    }
 });
