@@ -1,110 +1,17 @@
-async function checkUserReviewEligibility(product) {
-    try {
-        const eligibility = await checkReviewEligibility(userId, product._id);
-        matchingOrderId = eligibility.orderId;
-
-        if (eligibility.reviewStatus === CONSTANTS.REVIEWS.STATUSES.PENDING) {
-            $w("#reviewStatusMessage").text = "Your review is under review.";
-            $w("#reviewStatusMessage").show();
-            $w(RATING_INPUT_ID).hide();
-            $w("#submitReviewButton").hide();
-            $w("#writeReviewButton").hide();
-            $w("#reviewForm").collapse();
-            $w("#approvedReviewForm").collapse();
-            $w("#reviewImagePlaceholder").collapse();
-            $w("#reviewImageHtml").collapse();
-        } else if (eligibility.reviewStatus === CONSTANTS.REVIEWS.STATUSES.REJECTED) {
-            $w("#reviewStatusMessage").text = "Your review was rejected. Please revise and resubmit.";
-            $w("#reviewStatusMessage").show();
-            $w(RATING_INPUT_ID).show();
-            $w("#submitReviewButton").hide();
-            $w("#writeReviewButton").hide(); // Hide by default, form is expanded
-            $w("#reviewForm").expand();
-            $w("#approvedReviewForm").collapse();
-
-            const rejectedReview = await getRejectedReview(userId, product._id, eligibility.orderId);
-            if (rejectedReview) {
-                $w(RATING_INPUT_ID).value = rejectedReview.rating;
-                $w("#reviewText").value = rejectedReview.reviewText || "";
-                if (rejectedReview.imageUrl) {
-                    $w("#reviewImagePlaceholder").src = rejectedReview.imageUrl;
-                    $w("#reviewImagePlaceholder").expand();
-                    $w("#reviewImageHtml").postMessage({
-                        type: "initUpload",
-                        hasImage: true,
-                        label: "Change photo review"
-                    });
-                    $w("#reviewImageHtml").expand();
-                } else {
-                    $w("#reviewImagePlaceholder").collapse();
-                    $w("#reviewImageHtml").postMessage({
-                        type: "initUpload",
-                        hasImage: false,
-                        label: "Add a photo review"
-                    });
-                    $w("#reviewImageHtml").expand();
-                }
-            }
-        } else if (eligibility.reviewStatus === CONSTANTS.REVIEWS.STATUSES.APPROVED) {
-            const approvedReview = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
-                .eq("userId", userId)
-                .eq("productId", product._id)
-                .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
-                .find();
-
-            if (approvedReview.items.length > 0) {
-                const review = approvedReview.items[0];
-                $w("#usersApprovedRating").rating = review.rating;
-                $w("#approvedReviewText").text = review.reviewText || "";
-                if (review.imageUrl) {
-                    $w("#approvedReviewImage").src = review.imageUrl;
-                    $w("#approvedReviewImage").show();
-                } else {
-                    $w("#approvedReviewImage").hide();
-                }
-                $w("#approvedReviewForm").expand();
-                $w("#reviewStatusMessage").hide();
-                $w(RATING_INPUT_ID).hide();
-                $w("#submitReviewButton").hide();
+    $w(RATING_INPUT_ID).onChange(async () => {
+        const product = dataset.getCurrentItem();
+        try {
+            const eligibility = await checkReviewEligibility(userId, product._id);
+            if ((eligibility.canReview || eligibility.reviewStatus === CONSTANTS.REVIEWS.STATUSES.REJECTED) &&
+                $w(RATING_INPUT_ID).value && !$w("#reviewForm").isVisible) {
+                $w("#writeReviewButton").show();
+                $w("#submitReviewButton").show();
+            } else {
                 $w("#writeReviewButton").hide();
-                $w("#reviewForm").collapse();
-                $w("#reviewImagePlaceholder").collapse();
-                $w("#reviewImageHtml").collapse();
+                $w("#submitReviewButton").show();
             }
-        } else if (eligibility.canReview) {
-            $w("#reviewStatusMessage").hide();
-            $w(RATING_INPUT_ID).show();
-            $w("#submitReviewButton").hide();
-            $w("#writeReviewButton").hide(); // Hide by default on page load
-            $w("#reviewForm").collapse();
-            $w("#approvedReviewForm").collapse();
-            $w("#reviewImagePlaceholder").collapse();
-            $w("#reviewImageHtml").postMessage({
-                type: "initUpload",
-                hasImage: false,
-                label: "Add a photo review"
-            });
-            $w("#reviewImageHtml").expand();
-        } else {
-            $w(RATING_INPUT_ID).hide();
-            $w("#submitReviewButton").hide();
+        } catch (error) {
+            console.error("Error checking review eligibility on rating change:", error);
             $w("#writeReviewButton").hide();
-            $w("#reviewStatusMessage").hide();
-            $w("#reviewForm").collapse();
-            $w("#approvedReviewForm").collapse();
-            $w("#reviewImagePlaceholder").collapse();
-            $w("#reviewImageHtml").collapse();
         }
-    } catch (error) {
-        console.error("Error checking review eligibility:", error);
-        MessageHandler.showMessage({ message: "Failed to load review section.", type: "error" });
-        $w(RATING_INPUT_ID).hide();
-        $w("#submitReviewButton").hide();
-        $w("#writeReviewButton").hide();
-        $w("#reviewStatusMessage").hide();
-        $w("#reviewForm").collapse();
-        $w("#approvedReviewForm").collapse();
-        $w("#reviewImagePlaceholder").collapse();
-        $w("#reviewImageHtml").collapse();
-    }
-}
+    });
