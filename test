@@ -1,74 +1,36 @@
-async function displayReviews(productId) {
+export const getApprovedReviews = webMethod(Permissions.Anyone, async (productId, filter = "newest", limit = CONSTANTS.REVIEWS.PAGE_SIZE, skip = 0) => {
     try {
-        const { reviews, hasNext } = await getApprovedReviews(productId, currentFilter, CONSTANTS.REVIEWS.PAGE_SIZE);
-        const filteredReviews = reviews.filter(review => review.reviewText || review.imageUrl);
-
-        if (reviews.length > 0) {
-            const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
-            $w("#averageRating").text = String(Math.round(avgRating * 2) / 2);
-            $w("#totalReviews").text = `${reviews.length} Reviews`;
-
-            const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-            reviews.forEach(review => {
-                const rating = Math.round(review.rating);
-                if (rating >= 1 && rating <= 5) {
-                    ratingCounts[rating]++;
-                }
-            });
-
-            [1, 2, 3, 4, 5].forEach(rating => {
-                const progressBar = $w(`#progressBar${rating}`);
-                progressBar.targetValue = reviews.length;
-                progressBar.value = ratingCounts[rating];
-            });
-        } else {
-            $w("#averageRating").text = "0";
-            $w("#totalReviews").text = "No reviews yet";
-            [1, 2, 3, 4, 5].forEach(rating => {
-                const progressBar = $w(`#progressBar${rating}`);
-                progressBar.targetValue = 1;
-                progressBar.value = 0;
-            });
-        }
-
-        $w("#reviewsRepeater").onItemReady(($item, itemData) => {
-            $item("#reviewerName").text = itemData.customerName || "Anonymous";
-            $item("#reviewRating").rating = itemData.rating;
-            $item("#reviewTextDisplay").text = itemData.reviewText || "";
-            if (itemData.imageUrl) {
-                $item("#reviewImage").src = itemData.imageUrl;
-                $item("#reviewImage").show();
-                $item("#reviewImage").onClick(() => {
-                    wixWindow.openLightbox("imageGalleryLightbox", {
-                        review: itemData,
-                        showNavigation: false,
-                        productId
-                    });
-                });
-            } else {
-                $item("#reviewImage").hide();
-            }
-            $item("#reviewDate").text = new Date(itemData._createdDate).toLocaleDateString("en-IN", {
-                year: "numeric",
-                month: "long",
-                day: "numeric"
-            });
-        });
-
-        $w("#reviewsRepeater").data = filteredReviews;
-
-        const totalFilteredCount = (await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+        let query = wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
             .eq("productId", productId)
             .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
-            .hasSome("reviewText", [""])
-            .or(wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
-                .eq("productId", productId)
-                .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
-                .ne("imageUrl", ""))
-            .count());
-        $w("#loadMoreReviews")[totalFilteredCount > CONSTANTS.REVIEWS.PAGE_SIZE ? "show" : "hide"]();
+            .limit(limit)
+            .skip(skip);
+
+        switch (filter) {
+        case "highestRating":
+            query = query.descending("rating").descending("_createdDate");
+            break;
+        case "lowestRating":
+            query = query.ascending("rating").descending("_createdDate");
+            break;
+        case "newest":
+            query = query.descending("_createdDate");
+            break;
+        case "oldest":
+            query = query.ascending("_createdDate");
+            break;
+        default:
+            query = query.descending("_createdDate");
+        }
+
+        const result = await query.find();
+        return {
+            reviews: result.items,
+            hasNext: result.hasNext(),
+            totalCount: result.totalCount
+        };
     } catch (error) {
-        console.error("Error displaying reviews:", error);
-        MessageHandler.showMessage({ message: "Failed to load reviews.", type: "error" });
+        console.error("Error fetching approved reviews:", error);
+        return { reviews: [], hasNext: false, totalCount: 0 };
     }
-}
+});
