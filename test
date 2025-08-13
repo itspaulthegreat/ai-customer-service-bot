@@ -13,8 +13,38 @@ async function checkUserReviewEligibility(product) {
             console.log("inside getUserProductOrderReview", existingData);
             if (existingData.success && existingData.review && existingData.review.rating) {
                 $w(RATING_INPUT_ID).value = existingData.review.rating;
+                // Populate review text and image if they exist
+                if (existingData.review.reviewText) {
+                    $w("#reviewText").value = existingData.review.reviewText;
+                }
+                if (existingData.review.imageUrl) {
+                    $w("#reviewImagePlaceholder").src = existingData.review.imageUrl;
+                    $w("#reviewImagePlaceholder").expand();
+                    $w("#reviewImageHtml").postMessage({
+                        type: "initUpload",
+                        hasImage: true,
+                        label: "Change photo review"
+                    });
+                    $w("#reviewImageHtml").expand();
+                } else {
+                    $w("#reviewImagePlaceholder").collapse();
+                    $w("#reviewImageHtml").postMessage({
+                        type: "initUpload",
+                        hasImage: false,
+                        label: "Add a photo review"
+                    });
+                    $w("#reviewImageHtml").expand();
+                }
             } else {
                 $w(RATING_INPUT_ID).value = null;
+                $w("#reviewText").value = "";
+                $w("#reviewImagePlaceholder").collapse();
+                $w("#reviewImageHtml").postMessage({
+                    type: "initUpload",
+                    hasImage: false,
+                    label: "Add a photo review"
+                });
+                $w("#reviewImageHtml").expand();
             }
         } else {
             $w(RATING_INPUT_ID).hide();
@@ -32,7 +62,7 @@ async function checkUserReviewEligibility(product) {
         } else if (eligibility.reviewStatus === CONSTANTS.REVIEWS.STATUSES.REJECTED) {
             $w("#reviewStatusMessage").text = "Your review was rejected. Please revise and resubmit.";
             $w("#reviewStatusMessage").show();
-            $w("#submitReviewButton").hide();
+            $w("#submitReviewButton").show();
             $w("#writeReviewButton").hide();
             $w("#reviewForm").expand();
             $w("#approvedReviewForm").collapse();
@@ -84,13 +114,19 @@ async function checkUserReviewEligibility(product) {
                 $w("#reviewImagePlaceholder").collapse();
                 $w("#reviewImageHtml").collapse();
             }
-        } else if (eligibility.canReview || eligibility.orderId) {
-            // Show review form components if user can review or has rating
+        } else if (eligibility.canReview) {
+            // Show review form components if user can review (includes rating-only cases)
             $w("#reviewStatusMessage").hide();
-            $w("#submitReviewButton").hide();
-            $w("#writeReviewButton").hide();
-            $w("#reviewForm").collapse();
+            $w("#writeReviewButton").hide(); // Hide write review button as form is already expanded
+            $w("#reviewForm").expand(); // Expand form for rating-only cases
             $w("#approvedReviewForm").collapse();
+            // Check if review text or image exists to show submit button
+            const existingData = await getUserProductOrderReview(userId, product._id, eligibility.orderId);
+            if (existingData.success && existingData.review && (existingData.review.reviewText || existingData.review.imageUrl)) {
+                $w("#submitReviewButton").show();
+            } else {
+                $w("#submitReviewButton").show(); // Show submit button whenever form is expanded
+            }
             $w("#reviewImagePlaceholder").collapse();
             $w("#reviewImageHtml").postMessage({
                 type: "initUpload",
@@ -99,8 +135,8 @@ async function checkUserReviewEligibility(product) {
             });
             $w("#reviewImageHtml").expand();
         } else {
-            $w("#submitReviewButton").hide();
             $w("#writeReviewButton").hide();
+            $w("#submitReviewButton").hide();
             $w("#reviewStatusMessage").hide();
             $w("#reviewForm").collapse();
             $w("#approvedReviewForm").collapse();
@@ -111,8 +147,8 @@ async function checkUserReviewEligibility(product) {
         console.error("Error checking review eligibility:", error);
         MessageHandler.showMessage({ message: "Failed to load review section.", type: "error" });
         $w(RATING_INPUT_ID).hide();
-        $w("#submitReviewButton").hide();
         $w("#writeReviewButton").hide();
+        $w("#submitReviewButton").hide();
         $w("#reviewStatusMessage").hide();
         $w("#reviewForm").collapse();
         $w("#approvedReviewForm").collapse();
