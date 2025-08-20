@@ -1,59 +1,370 @@
-$item('#ratingsInputDesktop').onChange((event) => {
-                    const newRating = parseInt(event.target.value);
-                    console.log(`[ratingsInputDesktop.onChange] New rating ${newRating} for order ${itemData.displayOrderId}`);
-                    submitRating({
-                            userId: userId,
-                            orderId: itemData.orderId,
-                            productId: itemData.catalogItemId,
-                            rating: newRating
-                        })
+async function setupOrdersManagement() {
+    try {
+        // Set the multiStateBox to show the orders state
+        $w('#multiStateBox').changeState('ordersState');
+
+        // Reset pagination variables
+        currentOrdersPage = 0;
+        hasMoreOrders = true;
+        isLoadingOrders = false;
+
+        console.log('[setupOrdersManagement] Initializing orders section, userId:', userId);
+
+        // Setup repeater
+        $w('#ordersRepeater').onItemReady(($item, itemData) => {
+            // Set basic item data
+            $item('#sizeText').text = itemData.size;
+            $item('#quantityText').text = itemData.quantity.toString();
+            $item('#shipmentStatusText').text = itemData.shipmentStatus;
+            $item('#orderDateText').text = `On, ${itemData.formattedDate}`;
+            $item('#brandNameText').text = itemData.brandName;
+            $item('#productNameText').text = itemData.productName;
+
+            // Set product image if available
+            if (itemData.productImage) {
+                $item('#productImage').src = itemData.productImage;
+            }
+
+            // Initialize UI elements
+            if ($item('#writeReviewButton').type) $item('#writeReviewButton').hide();
+            if ($item('#seeReviewButton').type) $item('#seeReviewButton').hide();
+            if ($item('#reviewStatusText').type) $item('#reviewStatusText').hide();
+            if ($item('#reviewStatusContainer').type) $item('#reviewStatusContainer').collapse(); // Collapse by default
+
+            // Handle review for delivered items
+            if (itemData.shipmentStatus === 'Delivered') {
+                console.log(`[onItemReady] Item ${itemData.displayOrderId} is delivered, checking review`);
+                $item('#deliveryExpectedContainer').collapse();
+                $item('#ratingStack').expand(); // Expand reviewRatingContainer
+                $item('#reviewStatusContainer').expand(); // Expand reviewStatusContainer
+
+                // Check if review data is already in itemData
+                if (itemData.review) {
+                    console.log(`[onItemReady] Using review from itemData for order ${itemData.orderId}`);
+                    if (itemData.review.rating) {
+                        $item('#ratingsInputDesktop').value = Number(itemData.review.rating);
+                    }
+                    const reviewStatus = itemData.review.status;
+                    if ($item('#reviewStatusText').type) {
+                        if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.PENDING) {
+                            $item('#reviewStatusText').text = "Your review is under review.";
+                            $item('#reviewStatusText').customClassList.add("review-status-pending");
+                            $item('#reviewStatusText').show();
+                            if ($item('#seeReviewButton').type) {
+                                $item('#seeReviewButton').show();
+                            }
+                        } else if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.APPROVED) {
+                            $item('#reviewStatusText').text = "Your review has been approved.";
+                            $item('#reviewStatusText').customClassList.add("review-status-approved");
+                            $item('#reviewStatusText').show();
+                            if ($item('#seeReviewButton').type) {
+                                $item('#seeReviewButton').show();
+                            }
+                        } else if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.REJECTED) {
+                            $item('#reviewStatusText').text = "Your review was rejected. Please revise.";
+                            $item('#reviewStatusText').customClassList.add("review-status-rejected");
+                            $item('#reviewStatusText').show();
+                            if ($item('#writeReviewButton').type) {
+                                $item('#writeReviewButton').show();
+                            }
+                        } else if (!itemData.review.reviewText && !itemData.review.imageUrl) {
+                            if ($item('#writeReviewButton').type) {
+                                $item('#writeReviewButton').show();
+                            }
+                        }
+                    }
+                } else {
+                    // Fetch review if not in itemData
+                    console.log(`[onItemReady] Fetching review for order ${itemData.orderId}`);
+                    getUserProductOrderReview(userId, itemData.catalogItemId, itemData.orderId)
                         .then((result) => {
-                            if (result.success) {
-                                console.log(`[ratingsInputDesktop.onChange] Rating submitted successfully for order ${itemData.displayOrderId}`);
-                                MessageHandler.showMessage({
-                                    message: result.message,
-                                    type: 'success'
-                                });
-                                $item('#ratingsInputDesktop').value = Number(newRating);
-                                // Show "Write a Review" button after rating
+                            console.log("results", result);
+                            if (result.success && result.review) {
+                                $item('#ratingsInputDesktop').value = Number(result.review.rating);
+                                console.log(`[onItemReady] Set rating to ${result.review.rating} for order ${itemData.orderId}`);
+
+                                const reviewStatus = result.review.status;
+                                if ($item('#reviewStatusText').type) {
+                                    if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.PENDING) {
+                                        $item('#reviewStatusText').text = "Your review is under review.";
+                                        $item('#reviewStatusText').customClassList.add("review-status-pending");
+                                        $item('#reviewStatusText').show();
+                                        if ($item('#seeReviewButton').type) {
+                                            $item('#seeReviewButton').show();
+                                        }
+                                    } else if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.APPROVED) {
+                                        $item('#reviewStatusText').text = "Your review has been approved.";
+                                        $item('#reviewStatusText').customClassList.add("review-status-approved");
+                                        $item('#reviewStatusText').show();
+                                        if ($item('#seeReviewButton').type) {
+                                            $item('#seeReviewButton').show();
+                                        }
+                                    } else if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.REJECTED) {
+                                        $item('#reviewStatusText').text = "Your review was rejected. Please revise.";
+                                        $item('#reviewStatusText').customClassList.add("review-status-rejected");
+                                        $item('#reviewStatusText').show();
+                                        if ($item('#writeReviewButton').type) {
+                                            $item('#writeReviewButton').show();
+                                        }
+                                    } else if (!result.review.reviewText && !result.review.imageUrl) {
+                                        if ($item('#writeReviewButton').type) {
+                                            $item('#writeReviewButton').show();
+                                        }
+                                    }
+                                }
+                            } else {
+                                $item('#ratingsInputDesktop').value = null;
+                                console.log(`[onItemReady] No valid review found for order ${itemData.displayOrderId}`);
                                 if ($item('#writeReviewButton').type) {
                                     $item('#writeReviewButton').show();
                                 }
-                                if ($item('#reviewStatusText').type) {
-                                    $item('#reviewStatusText').hide();
-                                }
-                                if ($item('#seeReviewButton').type) {
-                                    $item('#seeReviewButton').hide();
-                                }
-                                // Update repeater item data with new rating
-                                const currentData = $w('#ordersRepeater').data;
-                                const updatedItem = {
-                                    ...itemData,
-                                    review: {
-                                        ...itemData.review,
-                                        rating: newRating
-                                    }
-                                };
-                                const itemIndex = currentData.findIndex(item => item._id === itemData._id);
-                                if (itemIndex !== -1) {
-                                    currentData[itemIndex] = updatedItem;
-                                    $w('#ordersRepeater').data = currentData;
-                                }
-                            } else {
-                                console.error(`[ratingsInputDesktop.onChange] Error submitting rating: ${result.message}`);
-                                MessageHandler.showMessage({
-                                    message: result.message,
-                                    type: 'error'
-                                });
-                                $item('#ratingsInputDesktop').value = null;
                             }
                         })
                         .catch((error) => {
-                            console.error(`[ratingsInputDesktop.onChange] Error submitting rating for order ${itemData.displayOrderId}:`, error);
+                            console.error(`[onItemReady] Error fetching review for order ${itemData.displayOrderId}:`, error);
+                            $item('#ratingsInputDesktop').value = null;
+                            if ($item('#writeReviewButton').type) {
+                                $item('#writeReviewButton').show();
+                            }
+                        });
+                }
+            } else {
+                console.log(`[onItemReady] Item ${itemData.displayOrderId} is not delivered, hiding review and rating`);
+                $item('#deliveryExpectedContainer').expand();
+                $item('#ratingStack').collapse(); // Collapse reviewRatingContainer
+                $item('#reviewStatusContainer').collapse(); // Collapse reviewStatusContainer
+                $item('#deliveryDate').text = itemData.estimatedDeliveryDate ?
+                    formatDeliveryDate(itemData.estimatedDeliveryDate) : 'N/A';
+            }
+
+            // Handle rating submission
+            $item('#ratingsInputDesktop').onChange((event) => {
+                const newRating = parseInt(event.target.value);
+                console.log(`[ratingsInputDesktop.onChange] New rating ${newRating} for order ${itemData.displayOrderId}`);
+                submitRating({
+                    userId: userId,
+                    orderId: itemData.orderId,
+                    productId: itemData.catalogItemId,
+                    rating: newRating
+                })
+                    .then((result) => {
+                        if (result.success) {
+                            console.log(`[ratingsInputDesktop.onChange] Rating submitted successfully for order ${itemData.displayOrderId}`);
                             MessageHandler.showMessage({
-                                message: "Failed to submit rating. Please try again.",
+                                message: result.message,
+                                type: 'success'
+                            });
+                            $item('#ratingsInputDesktop').value = Number(newRating);
+
+                            // Fetch the latest review data to ensure we have the correct status
+                            getUserProductOrderReview(userId, itemData.catalogItemId, itemData.orderId)
+                                .then((reviewResult) => {
+                                    if (reviewResult.success && reviewResult.review) {
+                                        // Update repeater item data with full review data
+                                        const currentData = $w('#ordersRepeater').data;
+                                        const updatedItem = {
+                                            ...itemData,
+                                            review: reviewResult.review
+                                        };
+                                        const itemIndex = currentData.findIndex(item => item._id === itemData._id);
+                                        if (itemIndex !== -1) {
+                                            currentData[itemIndex] = updatedItem;
+                                            $w('#ordersRepeater').data = currentData; // Trigger repeater refresh
+                                        }
+
+                                        // Update UI based on review status
+                                        if ($item('#reviewStatusText').type) {
+                                            $item('#reviewStatusText').hide();
+                                            $item('#reviewStatusText').customClassList.remove(
+                                                "review-status-pending",
+                                                "review-status-approved",
+                                                "review-status-rejected"
+                                            );
+                                        }
+                                        if ($item('#writeReviewButton').type) {
+                                            $item('#writeReviewButton').hide();
+                                        }
+                                        if ($item('#seeReviewButton').type) {
+                                            $item('#seeReviewButton').hide();
+                                        }
+
+                                        const reviewStatus = reviewResult.review.status;
+                                        $item('#reviewStatusContainer').expand(); // Ensure container is expanded
+                                        if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.PENDING) {
+                                            $item('#reviewStatusText').text = "Your review is under review.";
+                                            $item('#reviewStatusText').customClassList.add("review-status-pending");
+                                            $item('#reviewStatusText').show();
+                                            if ($item('#seeReviewButton').type) {
+                                                $item('#seeReviewButton').show();
+                                            }
+                                        } else if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.APPROVED) {
+                                            $item('#reviewStatusText').text = "Your review has been approved.";
+                                            $item('#reviewStatusText').customClassList.add("review-status-approved");
+                                            $item('#reviewStatusText').show();
+                                            if ($item('#seeReviewButton').type) {
+                                                $item('#seeReviewButton').show();
+                                            }
+                                        } else if (reviewStatus === CONSTANTS.REVIEWS.STATUSES.REJECTED) {
+                                            $item('#reviewStatusText').text = "Your review was rejected. Please revise.";
+                                            $item('#reviewStatusText').customClassList.add("review-status-rejected");
+                                            $item('#reviewStatusText').show();
+                                            if ($item('#writeReviewButton').type) {
+                                                $item('#writeReviewButton').show();
+                                            }
+                                        } else if (!reviewResult.review.reviewText && !reviewResult.review.imageUrl) {
+                                            if ($item('#writeReviewButton').type) {
+                                                $item('#writeReviewButton').show();
+                                            }
+                                        }
+                                    } else {
+                                        // No review exists, show write review button
+                                        $item('#ratingsInputDesktop').value = Number(newRating);
+                                        if ($item('#writeReviewButton').type) {
+                                            $item('#writeReviewButton').show();
+                                        }
+                                        $item('#reviewStatusContainer').collapse(); // Collapse if no review
+                                    }
+                                })
+                                .catch((error) => {
+                                    console.error(`[ratingsInputDesktop.onChange] Error fetching review after rating:`, error);
+                                    MessageHandler.showMessage({
+                                        message: "Failed to load review data. Please try again.",
+                                        type: 'error'
+                                    });
+                                    $item('#reviewStatusContainer').collapse(); // Collapse on error
+                                });
+                        } else {
+                            console.error(`[ratingsInputDesktop.onChange] Error submitting rating: ${result.message}`);
+                            MessageHandler.showMessage({
+                                message: result.message,
                                 type: 'error'
                             });
                             $item('#ratingsInputDesktop').value = null;
+                            $item('#reviewStatusContainer').collapse(); // Collapse on error
+                        }
+                    })
+                    .catch((error) => {
+                        console.error(`[ratingsInputDesktop.onChange] Error submitting rating for order ${itemData.displayOrderId}:`, error);
+                        MessageHandler.showMessage({
+                            message: "Failed to submit rating. Please try again.",
+                            type: 'error'
                         });
+                        $item('#ratingsInputDesktop').value = null;
+                        $item('#reviewStatusContainer').collapse(); // Collapse on error
+                    });
+            });
+
+            // Handle "Write a Review" button click
+            if ($item('#writeReviewButton').type) {
+                $item('#writeReviewButton').onClick(async () => {
+                    try {
+                        const reviewData = await getUserProductOrderReview(userId, itemData.catalogItemId, itemData.orderId);
+                        const context = {
+                            userId,
+                            orderId: itemData.orderId,
+                            productId: itemData.catalogItemId,
+                            reviewStatus: reviewData.success && reviewData.review ? reviewData.review.status : null,
+                            existingReview: reviewData.success ? reviewData.review : null
+                        };
+                        const result = await wixWindow.openLightbox('ReviewLightbox', context);
+                        if (result && result.reviewSubmitted && result.review) {
+                            // Update repeater item UI directly
+                            $item('#writeReviewButton').hide();
+                            if ($item('#reviewStatusText').type) {
+                                $item('#reviewStatusText').text = "Your review is under review.";
+                                $item('#reviewStatusText').customClassList.add("review-status-pending");
+                                $item('#reviewStatusText').show();
+                            }
+                            if ($item('#seeReviewButton').type) {
+                                $item('#seeReviewButton').show();
+                            }
+                            $item('#reviewStatusContainer').expand(); // Ensure container is expanded
+                            // Update repeater item data to reflect new review status
+                            const currentData = $w('#ordersRepeater').data;
+                            const updatedItem = {
+                                ...itemData,
+                                review: {
+                                    ...itemData.review,
+                                    reviewText: result.review.reviewText,
+                                    imageUrl: result.review.imageUrl,
+                                    status: result.review.status,
+                                    customerName: result.review.customerName,
+                                    rating: result.review.rating
+                                }
+                            };
+                            const itemIndex = currentData.findIndex(item => item._id === itemData._id);
+                            if (itemIndex !== -1) {
+                                currentData[itemIndex] = updatedItem;
+                                $w('#ordersRepeater').data = currentData; // Trigger repeater refresh
+                            }
+                            // Optionally reload orders for consistency
+                            await loadOrdersPage(false);
+                        }
+                    } catch (error) {
+                        console.error(`Error opening ReviewLightbox for order ${itemData.displayOrderId}:`, error);
+                        MessageHandler.showMessage({
+                            message: "Failed to open review form. Please try again.",
+                            type: 'error'
+                        });
+                        $item('#reviewStatusContainer').collapse(); // Collapse on error
+                    }
                 });
+            }
+
+            // Handle "See Your Review" button click
+            if ($item('#seeReviewButton').type) {
+                $item('#seeReviewButton').onClick(async () => {
+                    try {
+                        const reviewData = await getUserProductOrderReview(userId, itemData.catalogItemId, itemData.orderId);
+                        const context = {
+                            userId,
+                            orderId: itemData.orderId,
+                            productId: itemData.catalogItemId,
+                            reviewStatus: reviewData.success && reviewData.review ? reviewData.review.status : null,
+                            existingReview: reviewData.success ? reviewData.review : null
+                        };
+                        await wixWindow.openLightbox('ReviewLightbox', context);
+                        $item('#reviewStatusContainer').expand(); // Ensure container is expanded
+                    } catch (error) {
+                        console.error(`Error opening ReviewLightbox for viewing review ${itemData.displayOrderId}:`, error);
+                        MessageHandler.showMessage({
+                            message: "Failed to view review. Please try again.",
+                            type: 'error'
+                        });
+                        $item('#reviewStatusContainer').collapse(); // Collapse on error
+                    }
+                });
+            }
+        });
+
+        // Setup pagination buttons (unchanged)
+        $w('#nextOrdersButton').onClick(async () => {
+            console.log('[nextOrdersButton] Clicked - currentPage:', currentOrdersPage, 'hasMoreOrders:', hasMoreOrders, 'isLoading:', isLoadingOrders);
+            if (!isLoadingOrders && hasMoreOrders) {
+                currentOrdersPage++;
+                console.log('[nextOrdersButton] Moving to page:', currentOrdersPage);
+                await loadOrdersPage(false);
+            }
+        });
+
+        $w('#prevOrdersButton').onClick(async () => {
+            console.log('[prevOrdersButton] Clicked - currentPage:', currentOrdersPage, 'isLoading:', isLoadingOrders);
+            if (!isLoadingOrders && currentOrdersPage > 0) {
+                currentOrdersPage--;
+                console.log('[prevOrdersButton] Moving to page:', currentOrdersPage);
+                await loadOrdersPage(false);
+            }
+        });
+
+        // Load first page of orders
+        await loadOrdersPage(false);
+
+        console.log('[setupOrdersManagement] Orders section initialized');
+    } catch (error) {
+        console.error('[setupOrdersManagement] Error setting up orders management:', error);
+        MessageHandler.showMessage({
+            message: "Failed to initialize orders section. Please try again.",
+            type: 'error'
+        });
+    }
+}
