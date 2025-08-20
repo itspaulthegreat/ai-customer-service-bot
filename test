@@ -1,15 +1,95 @@
-async function initializeSelectedOption() {
-    let routerData = wixWindowFrontend.getRouterData();
-    let initialState = 'selectState'; // default state
+export function account_Router(request) {
+    console.log("Account router request:", { 
+        path: request.path, 
+        query: request.query 
+    });
+    
+    let path = request.path.map(segment => segment.toLowerCase());
+    let data = {};
+    let seoData = { 
+        title: "Account", 
+        description: "Manage your account", 
+        noIndex: true, // Account pages should not be indexed
+        metaTags: [] 
+    };
 
-    if (routerData && routerData.section === "address") {
-        initialState = 'addressState';
-        await setupAddressManagement();
-    } else if (routerData && routerData.section === "orders") {
-        initialState = 'ordersState';
-        await setupOrdersManagement();
+    // Only handle sub-pages, no base /account route
+    if (path.length === 0) {
+        // No base account page - redirect or return 404
+        return notFound(); // Or redirect to /account/address
+        
+    } else if (path.length === 1) {
+        const subPage = path[0];
+        
+        switch (subPage) {
+            case "address":
+                data = { 
+                    title: "My Addresses", 
+                    section: "address",
+                    showAddresses: true
+                };
+                seoData.title = "My Addresses";
+                seoData.description = "Manage your shipping and billing addresses";
+                break;
+                
+            case "coupons":
+                data = { 
+                    title: "My Coupons", 
+                    section: "coupons",
+                    showCoupons: true
+                };
+                seoData.title = "My Coupons";
+                seoData.description = "View and manage your available coupons";
+                break;
+                
+            // Add more account sections as needed
+            case "orders":
+                data = { 
+                    title: "My Orders", 
+                    section: "orders",
+                    showOrders: true
+                };
+                seoData.title = "My Orders";
+                seoData.description = "View your order history";
+                break;
+                
+            case "track-orders":
+                data = { 
+                    title: "Track Orders", 
+                    section: "track-orders",
+                    showTrackOrders: true
+                };
+                seoData.title = "Track Orders";
+                seoData.description = "Track your order status and delivery";
+                break;
+                
+            case "offers":
+                data = { 
+                    title: "My Offers", 
+                    section: "offers",
+                    showOffers: true
+                };
+                seoData.title = "My Offers";
+                seoData.description = "View available offers and deals";
+                break;
+                
+            default:
+                return notFound();
+        }
+        
+    } else {
+        // More than one sub-path level
+        return notFound();
     }
 
-    // Update the visual selection
-    updateSelectedOption(initialState);
+    // Set meta tags for SEO
+    seoData.metaTags = [
+        { property: "og:title", content: seoData.title },
+        { property: "og:description", content: seoData.description },
+        { property: "og:type", content: "website" },
+        { name: "robots", content: "noindex, nofollow" }
+    ];
+
+    console.log("Account router data:", data);
+    return ok("account-page", data, seoData);
 }
