@@ -1,95 +1,171 @@
-export function account_Router(request) {
-    console.log("Account router request:", { 
-        path: request.path, 
-        query: request.query 
-    });
-    
-    let path = request.path.map(segment => segment.toLowerCase());
-    let data = {};
-    let seoData = { 
-        title: "Account", 
-        description: "Manage your account", 
-        noIndex: true, // Account pages should not be indexed
-        metaTags: [] 
-    };
-
-    // Only handle sub-pages, no base /account route
-    if (path.length === 0) {
-        // No base account page - redirect or return 404
-        return notFound(); // Or redirect to /account/address
-        
-    } else if (path.length === 1) {
-        const subPage = path[0];
-        
-        switch (subPage) {
-            case "address":
-                data = { 
-                    title: "My Addresses", 
-                    section: "address",
-                    showAddresses: true
-                };
-                seoData.title = "My Addresses";
-                seoData.description = "Manage your shipping and billing addresses";
-                break;
-                
-            case "coupons":
-                data = { 
-                    title: "My Coupons", 
-                    section: "coupons",
-                    showCoupons: true
-                };
-                seoData.title = "My Coupons";
-                seoData.description = "View and manage your available coupons";
-                break;
-                
-            // Add more account sections as needed
-            case "orders":
-                data = { 
-                    title: "My Orders", 
-                    section: "orders",
-                    showOrders: true
-                };
-                seoData.title = "My Orders";
-                seoData.description = "View your order history";
-                break;
-                
-            case "track-orders":
-                data = { 
-                    title: "Track Orders", 
-                    section: "track-orders",
-                    showTrackOrders: true
-                };
-                seoData.title = "Track Orders";
-                seoData.description = "Track your order status and delivery";
-                break;
-                
-            case "offers":
-                data = { 
-                    title: "My Offers", 
-                    section: "offers",
-                    showOffers: true
-                };
-                seoData.title = "My Offers";
-                seoData.description = "View available offers and deals";
-                break;
-                
-            default:
-                return notFound();
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'General Sans', Arial, sans-serif;
+            overflow: hidden;
         }
-        
-    } else {
-        // More than one sub-path level
-        return notFound();
+        .upload-container {
+            width: 100%;
+            max-width: 382px;
+            height: 100%;
+           
+            border: 1px solid #D6D6D6;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #FFFFFF;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            box-sizing: border-box;
+            margin: 0 auto;
+            padding: 5px 10px;
+        }
+        .upload-icon {
+            width: 23px;  
+            height: 23px;  
+            margin-right: min(10px, 2vw);
+            flex-shrink: 0;
+        }
+.upload-label {
+    font-family: 'General Sans', Arial, sans-serif;
+    font-weight: 400;
+    font-size: 15px; /* Fixed font size */
+    color: #565656;
+    flex-shrink: 1;
+    line-height: 1.2;
+}
+
+        .file-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="upload-container" id="uploadContainer">
+        <img src="https://static.wixstatic.com/shapes/6e41ae_c1089f55db194f9ea4611dde4be2093a.svg" class="upload-icon" alt="Upload Icon">
+        <span class="upload-label" id="uploadLabel">Add a photo review</span>
+        <input type="file" class="file-input" id="fileInput" accept="image/*">
+    </div>
+
+<script>
+    const fileInput = document.getElementById("fileInput");
+    const uploadLabel = document.getElementById("uploadLabel");
+
+    // Function to capitalize only the first letter of the first word
+    function capitalizeFirstWord(str) {
+        if (!str) return str;
+        const words = str.split(' ');
+        if (words.length === 0) return str;
+        words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase();
+        for (let i = 1; i < words.length; i++) {
+            words[i] = words[i].toLowerCase();
+        }
+        return words.join(' ');
     }
 
-    // Set meta tags for SEO
-    seoData.metaTags = [
-        { property: "og:title", content: seoData.title },
-        { property: "og:description", content: seoData.description },
-        { property: "og:type", content: "website" },
-        { name: "robots", content: "noindex, nofollow" }
-    ];
+    // Resize image to reduce data URL size
+    function resizeImage(file, maxSizeKB, callback) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                let width = img.width;
+                let height = img.height;
+                const maxDimension = 1024; // Max width/height in pixels
+                const targetSizeBytes = maxSizeKB * 1024; // Convert KB to bytes
 
-    console.log("Account router data:", data);
-    return ok("account-page", data, seoData);
-}
+                // Scale down if image is too large
+                if (width > maxDimension || height > maxDimension) {
+                    const ratio = Math.min(maxDimension / width, maxDimension / height);
+                    width = Math.round(width * ratio);
+                    height = Math.round(height * ratio);
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert to JPEG with quality adjustment
+                let quality = 0.9;
+                let dataUrl;
+                do {
+                    dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    quality -= 0.1;
+                } while (dataUrl.length > targetSizeBytes * 1.33 && quality > 0.1); // 1.33 accounts for base64 overhead
+
+                if (dataUrl.length > targetSizeBytes * 1.33) {
+                    callback(null, "Resized image still too large");
+                    return;
+                }
+                callback(dataUrl);
+            };
+            img.onerror = function() {
+                callback(null, "Failed to process image");
+            };
+        };
+        reader.onerror = function() {
+            callback(null, "Failed to read image");
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Initialize state from parent
+    window.onmessage = function(event) {
+        if (event.data && event.data.type === "initUpload") {
+            const { hasImage, label } = event.data;
+            uploadLabel.textContent = capitalizeFirstWord(label || "Add a photo review");
+            if (hasImage) {
+                uploadLabel.textContent = capitalizeFirstWord("Change photo review");
+            }
+        }
+    };
+
+    fileInput.addEventListener("change", function() {
+        if (this.files && this.files.length > 0) {
+            const file = this.files[0];
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                window.parent.postMessage({
+                    type: "uploadError",
+                    error: "Image size exceeds 5MB"
+                }, "*");
+                return;
+            }
+            resizeImage(file, 1000, (dataUrl, error) => {
+                if (error) {
+                    window.parent.postMessage({
+                        type: "uploadError",
+                        error: error
+                    }, "*");
+                    return;
+                }
+                window.parent.postMessage({
+                    type: "imageSelected",
+                    fileName: file.name,
+                    dataUrl: dataUrl
+                }, "*");
+            });
+        }
+    });
+
+    // Notify parent when component is ready
+    window.parent.postMessage({ type: "uploadReady" }, "*");
+</script>
+</body>
+</html>
