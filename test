@@ -1,113 +1,118 @@
-    async getOrderItemDetails(userId, orderId, productId) {
-        try {
-            console.log(`[OrderService.getOrderItemDetails] Fetching details for userId=${userId}, orderId=${orderId}, productId=${productId}`);
-
-            if (!userId || !orderId || !productId) {
-                console.error('[OrderService.getOrderItemDetails] Error: Missing required parameters');
-                return {
-                    success: false,
-                    metric_value: [],
-                    error: 'User ID, order ID, and product ID are required',
-                    code: 'MISSING_PARAMETER',
-                    context: { type: "order_item_details", orderId, productId }
-                };
-            }
-
-            // Verify the order belongs to the user
-            const orderQuery = wixData.query("Orders")
-                .eq("_id", orderId)
-                .eq("userId", userId)
-                .find();
-
-            const orderResult = await orderQuery;
-            if (orderResult.items.length === 0) {
-                console.error(`[OrderService.getOrderItemDetails] Order ${orderId} not found or access denied`);
-                return {
-                    success: false,
-                    metric_value: [],
-                    error: 'Order not found or access denied',
-                    code: 'NOT_FOUND',
-                    context: { type: "order_item_details", orderId, productId }
-                };
-            }
-
-            // Fetch the specific order item
-            const orderItemQuery = wixData.query("OrderItems")
-                .eq("orderId", orderId)
-                .eq("catalogItemId", productId)
-                .find();
-
-            const orderItemResult = await orderItemQuery;
-            if (orderItemResult.items.length === 0) {
-                console.error(`[OrderService.getOrderItemDetails] Order item not found for orderId=${orderId}, productId=${productId}`);
-                return {
-                    success: false,
-                    metric_value: [],
-                    error: 'Order item not found',
-                    code: 'NOT_FOUND',
-                    context: { type: "order_item_details", orderId, productId }
-                };
-            }
-
-            const item = orderItemResult.items[0];
-
-            // Fetch product details
-            const productResult = await wixData.query("allProducts")
-                .eq("_id", productId)
-                .find();
-
-            const productData = productResult.items.length > 0 ? productResult.items[0] : null;
-
-            // // Fetch review data if applicable
-            // let review = null;
-            // if (item.shipmentStatus === 'Delivered') {
-            //     const reviewResult = await getUserProductOrderReview(userId, productId, orderId);
-            //     if (reviewResult.success && reviewResult.review) {
-            //         review = reviewResult.review;
-            //         console.log(`[OrderService.getOrderItemDetails] Found review for productId=${productId}`);
-            //     }
-            // }
-
-            const orderItemDetails = {
-                _id: item._id,
-                orderId: item.orderId,
-                productId: item.catalogItemId,
-                displayOrderId: item.displayOrderId || item.orderId,
-                name: item.name || (productData ? productData.name : 'Unknown Product'),
-                brandName: productData ? (productData.brandName || CONSTANTS.BRAND_NAME) : CONSTANTS.BRAND_NAME,
-                productImage: productData ? productData.mainMedia : '',
-                price: item.price || 0,
-                size: item.options && item.options.Size ? item.options.Size : 'N/A',
-                quantity: item.quantity || 1,
-                shipmentStatus: item.shipmentStatus || 'Processing',
-                estimatedDeliveryDate: item.estimatedDeliveryDate || null,
-                formattedDate: this._formatDate(orderResult.items[0]._createdDate),
-                // Include shipping address data
-                shippingAddress: item.shippingAddress || null,
-                // review: review,
-                render: []
-            };
-
-            console.log(`[OrderService.getOrderItemDetails] Successfully fetched details for orderId=${orderId}, productId=${productId}`);
-            console.log(`[OrderService.getOrderItemDetails] Shipping address included:`, item.shippingAddress ? 'Yes' : 'No');
-
-            return {
-                success: true,
-                metric_value: [orderItemDetails],
-                context: {
-                    type: "order_item_details",
-                    orderId,
-                    productId
-                }
-            };
-        } catch (error) {
-            console.error(`[OrderService.getOrderItemDetails] Exception:`, error);
-            return {
-                success: false,
-                metric_value: [],
-                error: 'Failed to retrieve order item details: ' + error.message,
-                code: 'SERVER_ERROR',
-                context: { type: "order_item_details", orderId, productId }
-            };
+async function setupOrderDetails(orderId, productId) {
+    try {
+        // Fetch order item details
+        const result = await getOrderItemDetails(userId, orderId, productId);
+        if (!result.success || !result.metric_value.length) {
+            console.error('Failed to fetch order item details:', result.error);
+            MessageHandler.showMessage({
+                message: "Failed to load order details. Please try again.",
+                type: 'error'
+            });
+            $w('#multiStateBox').changeState('ordersState');
+            return;
         }
+
+        const item = result.metric_value[0];
+        $w('#orderIdText').text = item.orderId;
+        $w('#orderDetailsProductNameText').text = item.name;
+        $w('#orderDetailsBrandNameText').text = item.brandName;
+        $w('#orderDetailsPriceText').text = `₹${item.price.toString()}`;
+        $w('#orderDetailsProductSize').text = item.size;
+        $w('#orderDetailsProductQuantity').text = item.quantity.toString();
+        $w('#orderDetailsProductImage').src = item.productImage;
+        $w('#orderDetailsShipmentStatusText').text = item.shipmentStatus;
+
+        // Populate shipping address fields from shippingAddress data
+        if (item.shippingAddress) {
+            const address = item.shippingAddress;
+            
+            // Handle customer name - use name if available, otherwise use defaultName
+            const customerName = address.name || address.defaultName || '';
+            $w('#orderDetailsCustomerName').text = customerName;
+            
+            // Populate address fields
+            $w('#orderDetailsFullAddress').text = address.fullAddress || '';
+            $w('#orderDetailsStreet').text = address.streetName || '';
+            $w('#orderDetailsApartment').text = address.apartmentHouse || '';
+            $w('#orderDetailsLandMark').text = address.landmark || '';
+            $w('#orderDetailsStateName').text = address.state || '';
+            $w('#orderDetailsCityName').text = address.cityArea || '';
+            $w('#orderDetailsPincode').text = address.pincode || '';
+            
+            console.log('[setupOrderDetails] Shipping address populated:', {
+                customerName,
+                fullAddress: address.fullAddress,
+                streetName: address.streetName,
+                state: address.state,
+                cityArea: address.cityArea,
+                pincode: address.pincode
+            });
+        } else {
+            // Handle case where no shipping address is available
+            console.log('[setupOrderDetails] No shipping address found for order:', orderId);
+            $w('#orderDetailsCustomerName').text = '';
+            $w('#orderDetailsFullAddress').text = '';
+            $w('#orderDetailsStreet').text = '';
+            $w('#orderDetailsApartment').text = '';
+            $w('#orderDetailsLandMark').text = '';
+            $w('#orderDetailsStateName').text = '';
+            $w('#orderDetailsCityName').text = '';
+            $w('#orderDetailsPincode').text = '';
+        }
+
+        // Initialize review-related UI
+        $w('#orderDetailsRatingReviewCont').collapse();
+        $w('#orderDetailsSubmittedReviewForm').collapse();
+        $w('#orderDetailsReviewImageHtml').collapse();
+        $w('#orderDetailsReviewImagePlaceholder').collapse();
+
+        // Initialize HTML component for image upload
+        $w('#orderDetailsReviewImageHtml').onMessage((event) => {
+            if (event.data.type === "uploadReady") {
+                $w('#orderDetailsReviewImageHtml').postMessage({
+                    type: "initUpload",
+                    hasImage: false,
+                    label: "Add a photo review"
+                });
+            } else if (event.data.type === "imageSelected") {
+                $w('#orderDetailsReviewImagePlaceholder').src = event.data.dataUrl;
+                $w('#orderDetailsReviewImagePlaceholder').expand();
+                $w('#orderDetailsReviewImageHtml').postMessage({
+                    type: "initUpload",
+                    hasImage: true,
+                    label: "Change photo review"
+                });
+                if ($w('#orderDetailsRatingInput').value && $w('#orderDetailsReviewText').value) {
+                    $w('#orderDetailsSubmitReviewButton').show();
+                }
+            } else if (event.data.type === "uploadError") {
+                console.error("Image upload error:", event.data.error);
+                MessageHandler.showMessage({
+                    message: event.data.error || "Failed to upload image.",
+                    type: 'error',
+                    timeout: 3000
+                });
+            }
+        });
+
+        // Check if the order is delivered and eligible for review
+        if (item.shipmentStatus !== 'Delivered') {
+            console.log(`[setupOrderDetails] Order ${orderId} not delivered, hiding review form`);
+            return;
+        }
+
+        const eligibility = await checkReviewEligibility(userId, productId);
+        console.log(`[setupOrderDetails] Review eligibility for order ${orderId}, product ${productId}:`, eligibility);
+
+        // Handle review eligibility
+        await checkOrderDetailsReviewEligibility(item, eligibility, orderId, productId);
+
+    } catch (error) {
+        console.error('Error setting up order details:', error);
+        MessageHandler.showMessage({
+            message: "Failed to load order details. Please try again.",
+            type: 'error'
+        });
+        $w('#multiStateBox').changeState('ordersState');
     }
+}
