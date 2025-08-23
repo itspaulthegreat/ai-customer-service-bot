@@ -1,171 +1,89 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            font-family: 'General Sans', Arial, sans-serif;
-            overflow: hidden;
+export async function completeOrder(orderRecord, itemsToRemove) {
+    console.log("Received Order Record:", orderRecord);
+    console.log("Received Items to Remove:", itemsToRemove);
+    try {
+        const member = await currentMember.getMember();
+        const userId = member ? member._id : null;
+        orderRecord.userId = userId;
+
+        // Calculate proportional discounts
+        const totalMrp = orderRecord.products.reduce((sum, p) => sum + p.price * p.quantity, 0);
+        const couponDiscount = orderRecord.couponDiscount || 0;
+        const offerDiscount = orderRecord.offerDiscount || 0;
+
+        // Ensure estimatedDeliveryDate is a Date object
+        const estimatedDeliveryDate = orderRecord.estimatedDeliveryDate ? new Date(orderRecord.estimatedDeliveryDate) : null;
+
+        // Create OrderItems records
+        const orderItems = orderRecord.products.map(product => {
+            const productMrp = product.price * product.quantity;
+            const proportion = productMrp / totalMrp;
+            const proportionalCouponDiscount = Math.round(couponDiscount * proportion * 100) / 100;
+            const proportionalOfferDiscount = Math.round(offerDiscount * proportion * 100) / 100;
+            const totalPrice = (product.price - (product.itemDiscount || 0) - proportionalCouponDiscount - proportionalOfferDiscount) * product.quantity;
+
+            return {
+                orderId: orderRecord._id,
+                catalogItemId: product.catalogItemId,
+                name: product.name,
+                price: product.price,
+                quantity: product.quantity,
+                options: product.options,
+                itemDiscount: product.itemDiscount || 0,
+                proportionalCouponDiscount,
+                proportionalOfferDiscount,
+                totalPrice,
+                image: product.image || '',
+                shipmentStatus: 'Pending',
+                returnStatus: 'NotRequested',
+                refundAmount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                shippingAddress: orderRecord.customerAddress,
+                billingAddress: orderRecord.billingAddress,
+                shippingMode: orderRecord.shippingMode || 'Surface',
+                estimatedDeliveryDate: estimatedDeliveryDate
+            };
+        });
+
+        // Insert OrderItems
+        await Promise.all(orderItems.map(item => wixData.insert('OrderItems', item)));
+
+        // Insert Orders record
+        const orderToInsert = {
+            ...orderRecord,
+            shippingAddress: orderRecord.customerAddress,
+            billingAddress: orderRecord.billingAddress,
+            refundAmount: 0,
+            lastUpdated: new Date(),
+            shippingMode: orderRecord.shippingMode || 'Surface',
+            estimatedDeliveryDate: estimatedDeliveryDate
+        };
+        await wixData.insert('Orders', orderToInsert);
+        console.log("Order and OrderItems inserted successfully");
+
+        // Remove items from cart
+        const cart = await currentCart.getCurrentCart();
+        if (cart && cart.lineItems && cart.lineItems.length > 0) {
+            const uuidsToRemove = cart.lineItems
+                .filter(item => itemsToRemove.some(toRemove =>
+                    item.catalogReference.catalogItemId === toRemove.catalogItemId &&
+                    JSON.stringify(item.catalogReference?.options?.options || {}) === JSON.stringify(toRemove.options)
+                ))
+                .map(item => item._id);
+            if (uuidsToRemove.length > 0) {
+                await currentCart.removeLineItemsFromCurrentCart(uuidsToRemove);
+                console.log("Cart items removed:", uuidsToRemove);
+            } else {
+                console.warn("No matching items to remove:", itemsToRemove);
+            }
+        } else {
+            console.warn("Cart is empty or not loaded. Skipping removal.");
         }
-        .upload-container {
-            width: 100%;
-            max-width: 382px;
-            height: 100%;
-           
-            border: 1px solid #D6D6D6;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #FFFFFF;
-            cursor: pointer;
-            overflow: hidden;
-            position: relative;
-            box-sizing: border-box;
-            margin: 0 auto;
-            padding: 5px 10px;
-        }
-        .upload-icon {
-            width: 23px;  
-            height: 23px;  
-            margin-right: min(10px, 2vw);
-            flex-shrink: 0;
-        }
-.upload-label {
-    font-family: 'General Sans', Arial, sans-serif;
-    font-weight: 400;
-    font-size: 15px; /* Fixed font size */
-    color: #565656;
-    flex-shrink: 1;
-    line-height: 1.2;
+
+        return { success: true };
+    } catch (error) {
+        console.error("Error in completeOrder:", error);
+        throw new Error("Failed to complete order: " + error.message);
+    }
 }
-
-        .file-input {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-    <div class="upload-container" id="uploadContainer">
-        <img src="https://static.wixstatic.com/shapes/6e41ae_c1089f55db194f9ea4611dde4be2093a.svg" class="upload-icon" alt="Upload Icon">
-        <span class="upload-label" id="uploadLabel">Add a photo review</span>
-        <input type="file" class="file-input" id="fileInput" accept="image/*">
-    </div>
-
-<script>
-    const fileInput = document.getElementById("fileInput");
-    const uploadLabel = document.getElementById("uploadLabel");
-
-    // Function to capitalize only the first letter of the first word
-    function capitalizeFirstWord(str) {
-        if (!str) return str;
-        const words = str.split(' ');
-        if (words.length === 0) return str;
-        words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase();
-        for (let i = 1; i < words.length; i++) {
-            words[i] = words[i].toLowerCase();
-        }
-        return words.join(' ');
-    }
-
-    // Resize image to reduce data URL size
-    function resizeImage(file, maxSizeKB, callback) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = new Image();
-            img.src = e.target.result;
-            img.onload = function() {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                let width = img.width;
-                let height = img.height;
-                const maxDimension = 1024; // Max width/height in pixels
-                const targetSizeBytes = maxSizeKB * 1024; // Convert KB to bytes
-
-                // Scale down if image is too large
-                if (width > maxDimension || height > maxDimension) {
-                    const ratio = Math.min(maxDimension / width, maxDimension / height);
-                    width = Math.round(width * ratio);
-                    height = Math.round(height * ratio);
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Convert to JPEG with quality adjustment
-                let quality = 0.9;
-                let dataUrl;
-                do {
-                    dataUrl = canvas.toDataURL('image/jpeg', quality);
-                    quality -= 0.1;
-                } while (dataUrl.length > targetSizeBytes * 1.33 && quality > 0.1); // 1.33 accounts for base64 overhead
-
-                if (dataUrl.length > targetSizeBytes * 1.33) {
-                    callback(null, "Resized image still too large");
-                    return;
-                }
-                callback(dataUrl);
-            };
-            img.onerror = function() {
-                callback(null, "Failed to process image");
-            };
-        };
-        reader.onerror = function() {
-            callback(null, "Failed to read image");
-        };
-        reader.readAsDataURL(file);
-    }
-
-    // Initialize state from parent
-    window.onmessage = function(event) {
-        if (event.data && event.data.type === "initUpload") {
-            const { hasImage, label } = event.data;
-            uploadLabel.textContent = capitalizeFirstWord(label || "Add a photo review");
-            if (hasImage) {
-                uploadLabel.textContent = capitalizeFirstWord("Change photo review");
-            }
-        }
-    };
-
-    fileInput.addEventListener("change", function() {
-        if (this.files && this.files.length > 0) {
-            const file = this.files[0];
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                window.parent.postMessage({
-                    type: "uploadError",
-                    error: "Image size exceeds 5MB"
-                }, "*");
-                return;
-            }
-            resizeImage(file, 1000, (dataUrl, error) => {
-                if (error) {
-                    window.parent.postMessage({
-                        type: "uploadError",
-                        error: error
-                    }, "*");
-                    return;
-                }
-                window.parent.postMessage({
-                    type: "imageSelected",
-                    fileName: file.name,
-                    dataUrl: dataUrl
-                }, "*");
-            });
-        }
-    });
-
-    // Notify parent when component is ready
-    window.parent.postMessage({ type: "uploadReady" }, "*");
-</script>
-</body>
-</html>
