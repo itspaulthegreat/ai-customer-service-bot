@@ -1,89 +1,80 @@
-export async function completeOrder(orderRecord, itemsToRemove) {
-    console.log("Received Order Record:", orderRecord);
-    console.log("Received Items to Remove:", itemsToRemove);
+async function setupOrderDetails(orderId, productId) {
     try {
-        const member = await currentMember.getMember();
-        const userId = member ? member._id : null;
-        orderRecord.userId = userId;
-
-        // Calculate proportional discounts
-        const totalMrp = orderRecord.products.reduce((sum, p) => sum + p.price * p.quantity, 0);
-        const couponDiscount = orderRecord.couponDiscount || 0;
-        const offerDiscount = orderRecord.offerDiscount || 0;
-
-        // Ensure estimatedDeliveryDate is a Date object
-        const estimatedDeliveryDate = orderRecord.estimatedDeliveryDate ? new Date(orderRecord.estimatedDeliveryDate) : null;
-
-        // Create OrderItems records
-        const orderItems = orderRecord.products.map(product => {
-            const productMrp = product.price * product.quantity;
-            const proportion = productMrp / totalMrp;
-            const proportionalCouponDiscount = Math.round(couponDiscount * proportion * 100) / 100;
-            const proportionalOfferDiscount = Math.round(offerDiscount * proportion * 100) / 100;
-            const totalPrice = (product.price - (product.itemDiscount || 0) - proportionalCouponDiscount - proportionalOfferDiscount) * product.quantity;
-
-            return {
-                orderId: orderRecord._id,
-                catalogItemId: product.catalogItemId,
-                name: product.name,
-                price: product.price,
-                quantity: product.quantity,
-                options: product.options,
-                itemDiscount: product.itemDiscount || 0,
-                proportionalCouponDiscount,
-                proportionalOfferDiscount,
-                totalPrice,
-                image: product.image || '',
-                shipmentStatus: 'Pending',
-                returnStatus: 'NotRequested',
-                refundAmount: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                shippingAddress: orderRecord.customerAddress,
-                billingAddress: orderRecord.billingAddress,
-                shippingMode: orderRecord.shippingMode || 'Surface',
-                estimatedDeliveryDate: estimatedDeliveryDate
-            };
-        });
-
-        // Insert OrderItems
-        await Promise.all(orderItems.map(item => wixData.insert('OrderItems', item)));
-
-        // Insert Orders record
-        const orderToInsert = {
-            ...orderRecord,
-            shippingAddress: orderRecord.customerAddress,
-            billingAddress: orderRecord.billingAddress,
-            refundAmount: 0,
-            lastUpdated: new Date(),
-            shippingMode: orderRecord.shippingMode || 'Surface',
-            estimatedDeliveryDate: estimatedDeliveryDate
-        };
-        await wixData.insert('Orders', orderToInsert);
-        console.log("Order and OrderItems inserted successfully");
-
-        // Remove items from cart
-        const cart = await currentCart.getCurrentCart();
-        if (cart && cart.lineItems && cart.lineItems.length > 0) {
-            const uuidsToRemove = cart.lineItems
-                .filter(item => itemsToRemove.some(toRemove =>
-                    item.catalogReference.catalogItemId === toRemove.catalogItemId &&
-                    JSON.stringify(item.catalogReference?.options?.options || {}) === JSON.stringify(toRemove.options)
-                ))
-                .map(item => item._id);
-            if (uuidsToRemove.length > 0) {
-                await currentCart.removeLineItemsFromCurrentCart(uuidsToRemove);
-                console.log("Cart items removed:", uuidsToRemove);
-            } else {
-                console.warn("No matching items to remove:", itemsToRemove);
-            }
-        } else {
-            console.warn("Cart is empty or not loaded. Skipping removal.");
+        // Fetch order item details
+        const result = await getOrderItemDetails(userId, orderId, productId);
+        if (!result.success || !result.metric_value.length) {
+            console.error('Failed to fetch order item details:', result.error);
+            MessageHandler.showMessage({
+                message: "Failed to load order details. Please try again.",
+                type: 'error'
+            });
+            $w('#multiStateBox').changeState('ordersState');
+            return;
         }
 
-        return { success: true };
+        const item = result.metric_value[0];
+        $w('#orderIdText').text = item.orderId;
+        $w('#orderDetailsProductNameText').text = item.name;
+        $w('#orderDetailsBrandNameText').text = item.brandName;
+        $w('#orderDetailsPriceText').text = `₹${item.price.toString()}`;
+        $w('#orderDetailsProductSize').text = item.size;
+        $w('#orderDetailsProductQuantity').text = item.quantity.toString();
+        $w('#orderDetailsProductImage').src = item.productImage;
+        $w('#orderDetailsShipmentStatusText').text = item.shipmentStatus;
+
+        // Initialize review-related UI
+        $w('#orderDetailsRatingReviewCont').collapse();
+        $w('#orderDetailsSubmittedReviewForm').collapse();
+        $w('#orderDetailsReviewImageHtml').collapse();
+        $w('#orderDetailsReviewImagePlaceholder').collapse();
+
+        // Initialize HTML component for image upload
+        $w('#orderDetailsReviewImageHtml').onMessage((event) => {
+            if (event.data.type === "uploadReady") {
+                $w('#orderDetailsReviewImageHtml').postMessage({
+                    type: "initUpload",
+                    hasImage: false,
+                    label: "Add a photo review"
+                });
+            } else if (event.data.type === "imageSelected") {
+                $w('#orderDetailsReviewImagePlaceholder').src = event.data.dataUrl;
+                $w('#orderDetailsReviewImagePlaceholder').expand();
+                $w('#orderDetailsReviewImageHtml').postMessage({
+                    type: "initUpload",
+                    hasImage: true,
+                    label: "Change photo review"
+                });
+                if ($w('#orderDetailsRatingInput').value && $w('#orderDetailsReviewText').value) {
+                    $w('#orderDetailsSubmitReviewButton').show();
+                }
+            } else if (event.data.type === "uploadError") {
+                console.error("Image upload error:", event.data.error);
+                MessageHandler.showMessage({
+                    message: event.data.error || "Failed to upload image.",
+                    type: 'error',
+                    timeout: 3000
+                });
+            }
+        });
+
+        // Check if the order is delivered and eligible for review
+        if (item.shipmentStatus !== 'Delivered') {
+            console.log(`[setupOrderDetails] Order ${orderId} not delivered, hiding review form`);
+            return;
+        }
+
+        const eligibility = await checkReviewEligibility(userId, productId);
+        console.log(`[setupOrderDetails] Review eligibility for order ${orderId}, product ${productId}:`, eligibility);
+
+        // Handle review eligibility
+        await checkOrderDetailsReviewEligibility(item, eligibility, orderId, productId);
+
     } catch (error) {
-        console.error("Error in completeOrder:", error);
-        throw new Error("Failed to complete order: " + error.message);
+        console.error('Error setting up order details:', error);
+        MessageHandler.showMessage({
+            message: "Failed to load order details. Please try again.",
+            type: 'error'
+        });
+        $w('#multiStateBox').changeState('ordersState');
     }
 }
