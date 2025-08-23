@@ -1,152 +1,113 @@
-    async getUserOrderItems(userId, options = {}) {
+    async getOrderItemDetails(userId, orderId, productId) {
         try {
-            if (!userId) {
-                console.error('[OrderService.getUserOrderItems] Error: User ID is required');
+            console.log(`[OrderService.getOrderItemDetails] Fetching details for userId=${userId}, orderId=${orderId}, productId=${productId}`);
+
+            if (!userId || !orderId || !productId) {
+                console.error('[OrderService.getOrderItemDetails] Error: Missing required parameters');
                 return {
                     success: false,
                     metric_value: [],
-                    error: 'User ID is required',
-                    code: 'MISSING_USER_ID',
-                    context: { type: "user_order_items" }
+                    error: 'User ID, order ID, and product ID are required',
+                    code: 'MISSING_PARAMETER',
+                    context: { type: "order_item_details", orderId, productId }
                 };
             }
 
-            const {
-                limit = 5,
-                    offset = 0,
-                    sortBy = '_createdDate',
-                    sortOrder = 'desc'
-            } = options;
-
-            console.log(`[OrderService.getUserOrderItems] Input: userId=${userId}, limit=${limit}, offset=${offset}`);
-
-            // First, get user's orders to get orderIds
-            const userOrdersResult = await wixData.query("Orders")
+            // Verify the order belongs to the user
+            const orderQuery = wixData.query("Orders")
+                .eq("_id", orderId)
                 .eq("userId", userId)
                 .find();
 
-            const userOrderIds = userOrdersResult.items.map(order => order._id);
-            console.log(`[OrderService.getUserOrderItems] Found ${userOrderIds.length} orders for user`);
-
-            if (userOrderIds.length === 0) {
+            const orderResult = await orderQuery;
+            if (orderResult.items.length === 0) {
+                console.error(`[OrderService.getOrderItemDetails] Order ${orderId} not found or access denied`);
                 return {
-                    success: true,
+                    success: false,
                     metric_value: [],
-                    context: {
-                        type: "user_order_items",
-                        totalItems: 0,
-                        totalAvailable: 0,
-                        hasMore: false,
-                        pagination: { limit, offset, total: 0, currentPage: Math.floor(offset / limit) + 1, totalPages: 0 }
-                    }
+                    error: 'Order not found or access denied',
+                    code: 'NOT_FOUND',
+                    context: { type: "order_item_details", orderId, productId }
                 };
             }
 
-            // Get total count
-            let totalCountQuery = wixData.query("OrderItems");
-            if (userOrderIds.length === 1) {
-                totalCountQuery = totalCountQuery.eq("orderId", userOrderIds[0]);
-            } else {
-                totalCountQuery = totalCountQuery.hasSome("orderId", userOrderIds);
-            }
-            const totalCount = await totalCountQuery.count();
-            console.log(`[OrderService.getUserOrderItems] Total OrderItems: ${totalCount}`);
-
-            // DIRECT PAGINATION: Get OrderItems directly with database pagination
-            // We'll join with Orders for sorting by order date
-            let itemsQuery = wixData.query("OrderItems");
-            if (userOrderIds.length === 1) {
-                itemsQuery = itemsQuery.eq("orderId", userOrderIds[0]);
-            } else {
-                itemsQuery = itemsQuery.hasSome("orderId", userOrderIds);
-            }
-
-            // Sort by _createdDate on OrderItems (which should correlate with order date)
-            if (sortOrder === 'desc') {
-                itemsQuery = itemsQuery.descending('_createdDate');
-            } else {
-                itemsQuery = itemsQuery.ascending('_createdDate');
-            }
-
-            const itemsResult = await itemsQuery
-                .skip(offset)
-                .limit(limit)
+            // Fetch the specific order item
+            const orderItemQuery = wixData.query("OrderItems")
+                .eq("orderId", orderId)
+                .eq("catalogItemId", productId)
                 .find();
 
-            console.log(`[OrderService.getUserOrderItems] Query returned ${itemsResult.items.length} items for offset=${offset}, limit=${limit}`);
-
-            // Process items and format for frontend
-            const processedItems = [];
-            let idCounter = 1;
-
-            for (const item of itemsResult.items) {
-                const order = userOrdersResult.items.find(o => o._id === item.orderId);
-
-                if (!order) {
-                    console.log(`[OrderService.getUserOrderItems] Warning: No order found for orderId ${item.orderId}`);
-                    continue;
-                }
-
-                let size = 'N/A';
-                if (item.options && item.options.Size) {
-                    size = item.options.Size;
-                }
-
-                const formattedDate = new Date(order._createdDate).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                });
-
-                const processedItem = {
-                    _id: String(idCounter++),
-                    originalItemId: item._id,
-                    orderId: order._id,
-                    price: item.price || 0,
-                    size: size,
-                    quantity: item.quantity || 1,
-                    shipmentStatus: item.shipmentStatus || 'Processing',
-                    estimatedDeliveryDate: item.estimatedDeliveryDate || null,
-                    formattedDate: formattedDate,
-                    catalogItemId: item.catalogItemId,
-                    name: item.name,
-                    options: item.options || {}
+            const orderItemResult = await orderItemQuery;
+            if (orderItemResult.items.length === 0) {
+                console.error(`[OrderService.getOrderItemDetails] Order item not found for orderId=${orderId}, productId=${productId}`);
+                return {
+                    success: false,
+                    metric_value: [],
+                    error: 'Order item not found',
+                    code: 'NOT_FOUND',
+                    context: { type: "order_item_details", orderId, productId }
                 };
-
-                processedItems.push(processedItem);
             }
 
-            console.log(`[OrderService.getUserOrderItems] Processed ${processedItems.length} items`);
+            const item = orderItemResult.items[0];
 
-            const hasMore = (offset + limit) < totalCount;
-            const totalPages = Math.ceil(totalCount / limit);
+            // Fetch product details
+            const productResult = await wixData.query("allProducts")
+                .eq("_id", productId)
+                .find();
+
+            const productData = productResult.items.length > 0 ? productResult.items[0] : null;
+
+            // // Fetch review data if applicable
+            // let review = null;
+            // if (item.shipmentStatus === 'Delivered') {
+            //     const reviewResult = await getUserProductOrderReview(userId, productId, orderId);
+            //     if (reviewResult.success && reviewResult.review) {
+            //         review = reviewResult.review;
+            //         console.log(`[OrderService.getOrderItemDetails] Found review for productId=${productId}`);
+            //     }
+            // }
+
+            const orderItemDetails = {
+                _id: item._id,
+                orderId: item.orderId,
+                productId: item.catalogItemId,
+                displayOrderId: item.displayOrderId || item.orderId,
+                name: item.name || (productData ? productData.name : 'Unknown Product'),
+                brandName: productData ? (productData.brandName || CONSTANTS.BRAND_NAME) : CONSTANTS.BRAND_NAME,
+                productImage: productData ? productData.mainMedia : '',
+                price: item.price || 0,
+                size: item.options && item.options.Size ? item.options.Size : 'N/A',
+                quantity: item.quantity || 1,
+                shipmentStatus: item.shipmentStatus || 'Processing',
+                estimatedDeliveryDate: item.estimatedDeliveryDate || null,
+                formattedDate: this._formatDate(orderResult.items[0]._createdDate),
+                // Include shipping address data
+                shippingAddress: item.shippingAddress || null,
+                // review: review,
+                render: []
+            };
+
+            console.log(`[OrderService.getOrderItemDetails] Successfully fetched details for orderId=${orderId}, productId=${productId}`);
+            console.log(`[OrderService.getOrderItemDetails] Shipping address included:`, item.shippingAddress ? 'Yes' : 'No');
 
             return {
                 success: true,
-                metric_value: processedItems,
+                metric_value: [orderItemDetails],
                 context: {
-                    type: "user_order_items",
-                    totalItems: processedItems.length,
-                    totalAvailable: totalCount,
-                    hasMore: hasMore,
-                    pagination: {
-                        limit,
-                        offset,
-                        total: totalCount,
-                        currentPage: Math.floor(offset / limit) + 1,
-                        totalPages: totalPages
-                    }
+                    type: "order_item_details",
+                    orderId,
+                    productId
                 }
             };
-
         } catch (error) {
-            console.error('[OrderService.getUserOrderItems] Exception:', error);
+            console.error(`[OrderService.getOrderItemDetails] Exception:`, error);
             return {
                 success: false,
                 metric_value: [],
-                error: 'Failed to retrieve order items: ' + error.message,
+                error: 'Failed to retrieve order item details: ' + error.message,
                 code: 'SERVER_ERROR',
-                context: { type: "user_order_items" }
+                context: { type: "order_item_details", orderId, productId }
             };
         }
     }
