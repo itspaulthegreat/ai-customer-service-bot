@@ -1,383 +1,83 @@
-    $w('#payButton').onClick(async () => {
-        MessageHandler.clearMessages(false, 'cart');
+async function displayReviews(productId) {
+    try {
+        // Fetch all reviews with valid ratings (regardless of status) for average and progress bars
+        const { reviews, hasNext } = await getApprovedReviews(productId, currentFilter, CONSTANTS.REVIEWS.PAGE_SIZE);
 
-        if (!isValidCart) {
-            MessageHandler.showMessage('cart', { message: "Your cart is invalid. Please review your cart.", type: 'error' });
-            wixLocation.to(URLS.CART);
-            return;
+        // Calculate average rating from all reviews with valid ratings
+        const validReviews = reviews.filter(review =>
+            review.rating >= CONSTANTS.REVIEWS.RATING_MIN &&
+            review.rating <= CONSTANTS.REVIEWS.RATING_MAX
+        );
+        if (validReviews.length > 0) {
+            const avgRating = validReviews.reduce((sum, review) => sum + review.rating, 0) / validReviews.length;
+            $w("#averageRating").text = String(Math.round(avgRating * 2) / 2);
+
+            const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+            validReviews.forEach(review => {
+                const rating = Math.round(review.rating);
+                if (rating >= 1 && rating <= 5) {
+                    ratingCounts[rating]++;
+                }
+            });
+
+            [1, 2, 3, 4, 5].forEach(rating => {
+                const progressBar = $w(`#progressBar${rating}`);
+                progressBar.targetValue = validReviews.length;
+                progressBar.value = ratingCounts[rating];
+            });
+        } else {
+            $w("#averageRating").text = "0";
+            [1, 2, 3, 4, 5].forEach(rating => {
+                const progressBar = $w(`#progressBar${rating}`);
+                progressBar.targetValue = 1;
+                progressBar.value = 0;
+            });
         }
 
-        const stillValid = await validateAndLoadCart();
-        if (!stillValid) return;
+        // Count only APPROVED reviews with text or images for totalReviews
+        const totalFilteredCount = await wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+            .eq("productId", productId)
+            .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
+            .ne("reviewText", "")
+            .or(wixData.query(CONSTANTS.COLLECTIONS.REVIEWS)
+                .eq("productId", productId)
+                .eq("status", CONSTANTS.REVIEWS.STATUSES.APPROVED)
+                .ne("imageUrl", ""))
+            .count();
+        $w("#totalReviews").text = `${totalFilteredCount} Review${totalFilteredCount === 1 ? '' : 's'}`;
 
-        const currentState = $w('#multiStateBox').currentState;
-        if (currentState.id === 'addressState') {
-            $w("#backButton").hide()
-            // Address validation logic remains unchanged
-            const addresses = await getUserAddresses(userId);
-            const nonTempAddresses = addresses.filter(addr => !addr.isTemporary);
-            const hasNonTempAddresses = nonTempAddresses.length >= 1;
-            if (addresses.length === 0 || $w('#addressContainer').collapsed) {
-                selectedAddress = {
-                    name: $w('#nameInput').value,
-                    fullAddress: $w('#fullAddressInput').value,
-                    streetName: $w('#streetNameInput').value || '',
-                    apartmentHouse: $w('#apartmentHouseInput').value || '',
-                    landmark: $w('#landmarkInput').value || '',
-                    pincode: $w('#pincodeInput').value,
-                    state: $w('#stateInput').value,
-                    cityArea: $w('#cityAreaInput').value,
-                    isDefault: $w('#makeDefaultCheckbox').checked
-                };
+        // Filter only APPROVED reviews with text for reviewsRepeater
+        const filteredReviews = reviews.filter(review =>
+            review.status === CONSTANTS.REVIEWS.STATUSES.APPROVED && review.reviewText);
 
-                const addressError = validateAddressData(selectedAddress);
-                if (addressError) {
-                    MessageHandler.showMessage('cart', { message: addressError, type: 'error' });
-                    return;
-                }
-                toggleNameFieldUI(selectedAddress.name || '');
-                session.setItem('tempAddress', JSON.stringify(selectedAddress));
-            } else if (!selectedAddress) {
-                MessageHandler.showMessage('cart', { message: "Please select a shipping address.", type: 'error' });
-                return;
-            }
-
-            if (!$w('#sameAsShippingCheckbox').checked) {
-                selectedBillingAddress = {
-                    name: $w('#billingNameInput').value,
-                    fullAddress: $w('#billingFullAddressInput').value,
-                    streetName: $w('#billingStreetNameInput').value || '',
-                    apartmentHouse: $w('#billingApartmentHouseInput').value || '',
-                    landmark: $w('#billingLandmarkInput').value || '',
-                    pincode: $w('#billingPincodeInput').value,
-                    state: $w('#billingStateInput').value,
-                    cityArea: $w('#billingCityAreaInput').value
-                };
-
-                const billingError = validateAddressData(selectedBillingAddress);
-                if (billingError) {
-                    MessageHandler.showMessage('cart', { message: `Billing address error: ${billingError}`, type: 'error' });
-                    return;
-                }
-                session.setItem('selectedBillingAddress', JSON.stringify(selectedBillingAddress));
+        $w("#reviewsRepeater").onItemReady(($item, itemData) => {
+            $item("#reviewerName").text = itemData.customerName;
+            $item("#reviewRating").rating = itemData.rating;
+            $item("#reviewTextDisplay").text = itemData.reviewText || "";
+            if (itemData.imageUrl) {
+                $item("#reviewImage").src = itemData.imageUrl;
+                $item("#reviewImage").show();
+                $item("#reviewImage").onClick(() => {
+                    wixWindow.openLightbox("imageGalleryLightbox", {
+                        review: itemData,
+                        showNavigation: false,
+                        productId
+                    });
+                });
             } else {
-                selectedBillingAddress = { ...selectedAddress };
-                session.setItem('selectedBillingAddress', JSON.stringify(selectedBillingAddress));
+                $item("#reviewImage").hide();
             }
+            $item("#reviewDate").text = new Date(itemData._createdDate).toLocaleDateString("en-IN", {
+                year: "numeric",
+                month: "long",
+                day: "numeric"
+            });
+        });
 
-            const customerError = validateCustomerDetails();
-            if (customerError) {
-                MessageHandler.showMessage('cart', { message: customerError, type: 'error' });
-                return;
-            }
-
-            const pincodeRegex = /^[0-9]{6}$/;
-            if (!pincodeRegex.test(selectedAddress.pincode)) {
-                MessageHandler.showMessage('cart', {
-                    message: "Please enter a valid 6-digit pincode for shipping.",
-                    type: 'error'
-                });
-                $w('#nonDeliverableLabel').collapse();
-                $w('#shippingCost').text = "Free";
-                $w('#shippingCostStack').collapse();
-                return;
-            }
-
-            // Validate shipping cost
-            let shippingCost = selectedDeliveryMode === 'Surface' ? surfaceCost : expressCost;
-            if (shippingCost === null || typeof shippingCost !== 'number') {
-                $w('#nonDeliverableLabel').expand();
-                $w('#shippingCost').text = "Free";
-                $w('#shippingCostStack').collapse();
-                MessageHandler.showMessage('cart', {
-                    message: "Shipping not available for this pincode. Please select a different pincode.",
-                    type: 'error'
-                });
-                return;
-            }
-
-            const cartTotals = await updateTotal();
-            if (isNaN(cartTotals.finalTotal) || cartTotals.finalTotal <= 0) {
-                MessageHandler.showMessage('cart', {
-                    message: "Invalid cart total. Please review your cart and try again.",
-                    type: 'error'
-                });
-                return;
-            }
-
-            $w('#multiStateBox').changeState('paymentState');
-            $w('#paymentMethodsContainer').show();
-            $w('#backButton').show();
-            $w('#addNewAddressButton')[hasNonTempAddresses ? 'show' : 'hide']();
-            MessageHandler.showMessage('cart', { message: "Address validated successfully. Proceed with payment.", type: 'success' });
-        } else if (currentState.id === 'paymentState') {
-            $w("#backButton").show()
-            const addresses = await getUserAddresses(userId);
-            const nonTempAddresses = addresses.filter(addr => !addr.isTemporary);
-            const hasNonTempAddresses = nonTempAddresses.length >= 1;
-            const customer = {
-                name: $w('#nameInput').value,
-                email: $w('#emailInput').value,
-                phone: $w('#phoneInput').value,
-                shippingAddress: selectedAddress,
-                billingAddress: selectedBillingAddress,
-                makeDefault: $w('#makeDefaultCheckbox').checked
-            };
-
-            try {
-                $w('#payButton').label = "Processing...";
-                $w('#payButton').disable();
-
-                const customerError = validateCustomerDetails();
-                if (customerError) {
-                    MessageHandler.showMessage('cart', { message: customerError, type: 'error' });
-                    throw new Error(customerError);
-                }
-
-                if (!$w('#addressInputContainer').collapsed) {
-                    customer.shippingAddress = {
-                        name: $w('#nameInput').value,
-                        fullAddress: $w('#fullAddressInput').value,
-                        streetName: $w('#streetNameInput').value || '',
-                        apartmentHouse: $w('#apartmentHouseInput').value || '',
-                        landmark: $w('#landmarkInput').value || '',
-                        pincode: $w('#pincodeInput').value,
-                        state: $w('#stateInput').value,
-                        cityArea: $w('#cityAreaInput').value,
-                        isTemporary: false,
-                        isDefault: customer.makeDefault,
-                        hasExplicitDefault: customer.makeDefault
-                    };
-
-                    const shippingError = validateAddressData(customer.shippingAddress);
-                    if (shippingError) {
-                        MessageHandler.showMessage('cart', { message: `Shipping address error: ${shippingError}`, type: 'error' });
-                        throw new Error(shippingError);
-                    }
-                } else {
-                    customer.shippingAddress = {
-                        ...customer.shippingAddress,
-                        isTemporary: false,
-                        isDefault: customer.makeDefault,
-                        hasExplicitDefault: customer.makeDefault
-                    };
-                }
-
-                if ($w('#sameAsShippingCheckbox').checked) {
-                    customer.billingAddress = { ...customer.shippingAddress };
-                } else if (!$w('#billingAddressInputContainer').collapsed) {
-                    customer.billingAddress = {
-                        name: $w('#billingNameInput').value,
-                        fullAddress: $w('#billingFullAddressInput').value,
-                        streetName: $w('#billingStreetNameInput').value || '',
-                        apartmentHouse: $w('#billingApartmentHouseInput').value || '',
-                        landmark: $w('#billingLandmarkInput').value || '',
-                        pincode: $w('#billingPincodeInput').value,
-                        state: $w('#billingStateInput').value,
-                        cityArea: $w('#billingCityAreaInput').value
-                    };
-
-                    const billingError = validateAddressData(customer.billingAddress);
-                    if (billingError) {
-                        MessageHandler.showMessage('cart', { message: `Billing address error: ${billingError}`, type: 'error' });
-                        throw new Error(billingError);
-                    }
-                } else {
-                    customer.billingAddress = { ...customer.billingAddress };
-                }
-
-                const pincodeRegex = /^[0-9]{6}$/;
-                if (!pincodeRegex.test(customer.shippingAddress.pincode)) {
-                    MessageHandler.showMessage('cart', {
-                        message: "Please enter a valid 6-digit pincode for shipping.",
-                        type: 'error'
-                    });
-                    $w('#nonDeliverableLabel').collapse();
-                    $w('#shippingCost').text = "Free";
-                    $w('#shippingCostStack').collapse();
-                    throw new Error("Invalid shipping pincode");
-                }
-
-                // Validate shipping cost
-                let shippingCost = selectedDeliveryMode === 'Surface' ? surfaceCost : expressCost;
-                if (shippingCost === null || typeof shippingCost !== 'number') {
-                    $w('#nonDeliverableLabel').expand();
-                    $w('#shippingCost').text = "Free";
-                    $w('#shippingCostStack').collapse();
-                    MessageHandler.showMessage('cart', {
-                        message: "Shipping not available for this pincode. Please select a different pincode.",
-                        type: 'error'
-                    });
-                    throw new Error("Shipping not available");
-                }
-
-                const cartTotals = await updateTotal();
-                if (isNaN(cartTotals.finalTotal) || cartTotals.finalTotal <= 0) {
-                    MessageHandler.showMessage('cart', {
-                        message: "Invalid cart total. Please review your cart and try again.",
-                        type: 'error'
-                    });
-                    throw new Error("Invalid cart total");
-                }
-
-                if (selectedPaymentMethod === 'cod') {
-                    // Handle COD order
-                    const orderId = `cod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    const orderResponse = await createCODOrder({
-                        customer,
-                        selectedProducts,
-                        cartTotals,
-                        orderId
-                    });
-
-                    // Create order record
-                    const orderProducts = selectedProducts.map(product => ({
-                        catalogItemId: product.catalogItemId,
-                        name: product.name,
-                        price: product.price,
-                        quantity: product.quantity,
-                        options: product.options,
-                        itemDiscount: product.itemDiscount || 0
-                    }));
-                    console.log("orderProducts details",orderProducts)
-                    const orderRecord = {
-                        _id: orderId,
-                        paymentId: null,
-                        userId: userId,
-                        customerName: customer.name,
-                        customerEmail: customer.email,
-                        customerPhone: customer.phone,
-                        customerAddress: customer.shippingAddress,
-                        billingAddress: customer.billingAddress,
-                        products: orderProducts,
-                        totalMrp: cartTotals.totalMrp / 100,
-                        itemDiscount: cartTotals.totalItemDiscount / 100,
-                        couponDiscount: cartTotals.couponDiscount / 100,
-                        offerDiscount: cartTotals.offerDiscount / 100,
-                        shippingCost: cartTotals.shippingCost / 100,
-                        codPrice: cartTotals.codPrice / 100,
-                        totalAmount: cartTotals.finalTotal / 100,
-                        status: "Pending",
-                        paymentMethod: "COD",
-                        transactionDate: new Date(),
-                        couponCode: cartTotals.appliedCoupon || null,
-                        appliedOffers: cartTotals.appliedOffers || [],
-                        shippingMode: selectedDeliveryMode,
-                        estimatedDeliveryDate: estimatedDeliveryDate
-                    };
-
-                    const itemsToRemove = selectedProducts.map(p => ({
-                        catalogItemId: p.catalogItemId,
-                        options: p.options
-                    }));
-                    await completeOrder(orderRecord, itemsToRemove);
-
-                    // Clear session data
-                    session.removeItem('cartToken');
-                    session.removeItem('cartTotals');
-                    session.removeItem('selectedProducts');
-                    session.removeItem('tempAddress');
-                    session.removeItem('selectedAddressId');
-                    session.removeItem('selectedBillingAddress');
-                    session.removeItem('appliedCoupon');
-
-                    MessageHandler.showMessage('cart', { message: "COD order placed successfully!", type: 'success' });
-                    wixLocation.to(`${URLS.PAYMENT_SUCCESS}?orderId=${orderId}&status=pending`);
-                } else {
-                    // Existing Razorpay payment logic
-                    const orderResponse = await createOrder({
-                        amount: cartTotals.finalTotal, // Pass in paise
-                        currency: 'INR',
-                        receipt: `rcpt_${Date.now()}`
-                    });
-                    const { order, keyId } = orderResponse;
-
-                    const methodsConfig = {};
-                    CONSTANTS.PAYMENT_METHODS.forEach(method => {
-                        methodsConfig[method.razorpayMethod] = method.value === selectedPaymentMethod;
-                    });
-                    const hideMethods = CONSTANTS.STRICT_PAYMENT_METHODS ? [
-                        ...CONSTANTS.PAYMENT_METHODS
-                        .filter(method => method.value !== selectedPaymentMethod)
-                        .map(method => ({ method: method.razorpayMethod })),
-                        { method: "emi" },
-                        { method: "paylater" }
-                    ] : [
-                        ...CONSTANTS.PAYMENT_METHODS
-                        .filter(method => !method.enabled)
-                        .map(method => ({ method: method.razorpayMethod })),
-                        { method: "emi" },
-                        { method: "paylater" }
-                    ];
-
-                    const options = {
-                        key: keyId,
-                        amount: order.amount,
-                        currency: order.currency,
-                        order_id: order.id,
-                        prefill: {
-                            name: customer.name,
-                            email: customer.email,
-                            contact: customer.phone,
-                            method: CONSTANTS.PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod).razorpayMethod
-                        },
-                        methods: methodsConfig,
-                        config: {
-                            display: {
-                                blocks: {
-                                    [selectedPaymentMethod]: {
-                                        name: `Pay via ${CONSTANTS.PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod).label}`,
-                                        instruments: [{
-                                            method: CONSTANTS.PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod).razorpayMethod,
-                                            ...(CONSTANTS.PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod).flows ? { flows: CONSTANTS.PAYMENT_METHODS.find(method => method.value === selectedPaymentMethod).flows } : {})
-                                        }]
-                                    }
-                                },
-                                sequence: [`block.${selectedPaymentMethod}`],
-                                preferences: {
-                                    default: `block.${selectedPaymentMethod}`
-                                },
-                                hide: hideMethods
-                            }
-                        }
-                    };
-                    console.log('Payment options before sending to PaymentLightbox:', JSON.stringify(options, null, 2));
-
-                    const paymentResult = await wixWindow.openLightbox("PaymentLightbox", {
-                        paymentOptions: options,
-                        customer,
-                        selectedProducts,
-                        totalAmount: cartTotals.finalTotal,
-                        cartTotals
-                    });
-
-                    console.log('PaymentLightbox result:', paymentResult);
-                    if (paymentResult && paymentResult.status !== "paid") {
-                        MessageHandler.showMessage('cart', { message: `Payment failed: ${paymentResult.status}.`, type: 'error' });
-                        wixLocation.to(`${URLS.PAYMENT_FAILED}?reason=payment_${paymentResult.status}`);
-                        return;
-                    }
-
-                    if (paymentResult && paymentResult.status === "paid") {
-                        session.removeItem('cartToken');
-                        session.removeItem('cartTotals');
-                        session.removeItem('selectedProducts');
-                        session.removeItem('tempAddress');
-                        session.removeItem('selectedAddressId');
-                        session.removeItem('selectedBillingAddress');
-                        MessageHandler.showMessage('cart', { message: "Payment completed successfully!", type: 'success' });
-                        wixLocation.to(URLS.PAYMENT_SUCCESS);
-                    }
-                }
-            } catch (error) {
-                console.error("Payment Error:", error);
-                MessageHandler.showMessage('cart', { message: error.message || "Failed to initiate payment. Please try again.", type: 'error' });
-                wixLocation.to(`${URLS.PAYMENT_FAILED}?reason=initiation_error`);
-                return; // Ensure no further execution
-            } finally {
-                $w('#payButton').label = "Pay Now";
-                $w('#payButton').enable();
-                $w('#addNewAddressButton')[hasNonTempAddresses ? 'show' : 'hide']();
-            }
-        }
-    });
+        $w("#reviewsRepeater").data = filteredReviews;
+        $w("#loadMoreReviews")[totalFilteredCount > CONSTANTS.REVIEWS.PAGE_SIZE ? "show" : "hide"]();
+    } catch (error) {
+        console.error("Error displaying reviews:", error);
+        MessageHandler.showMessage({ message: "Failed to load reviews.", type: "error" });
+    }
+}
