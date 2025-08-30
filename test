@@ -1,944 +1,181 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-      
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #fafafa;
-            color: #1a1a1a;
-            min-height: 100vh;
-            line-height: 1.5;
-        }
-        
-        .main-container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 32px;
-        }
-      
-        .header {
-            margin-bottom: 40px;
-            padding-bottom: 24px;
-            border-bottom: 1px solid #e8e8e8;
-        }
-        
-        .header h1 {
-            font-size: 32px;
-            font-weight: 700;
-            color: #0f0f0f;
-            margin-bottom: 8px;
-            letter-spacing: -0.02em;
-        }
-        
-        .header-subtitle {
-            color: #6b6b6b;
-            font-size: 16px;
-            font-weight: 400;
-        }
-      
-        .control-panel {
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 16px;
-            padding: 28px;
-            margin-bottom: 28px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-        }
-        
-        .search-section {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: end;
-            margin-bottom: 24px;
-        }
-        
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .form-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #424242;
-            letter-spacing: -0.01em;
-        }
-        
-        .form-select, .form-input {
-            background: #ffffff;
-            border: 1.5px solid #d4d4d4;
-            border-radius: 10px;
-            padding: 12px 16px;
-            color: #1a1a1a;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.15s ease;
-            outline: none;
-            min-width: 160px;
-        }
-        
-        .form-select:focus, .form-input:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
-        }
-        
-        .form-input::placeholder {
-            color: #9ca3af;
-            font-weight: 400;
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            text-decoration: none;
-            outline: none;
-            letter-spacing: -0.01em;
-        }
-        
-        .btn-primary {
-            background: #2563eb;
-            color: #ffffff;
-            box-shadow: 0 1px 3px rgba(37, 99, 235, 0.12);
-        }
-        
-        .btn-primary:hover {
-            background: #1d4ed8;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
-        }
-        
-        .btn-secondary {
-            background: #f8f9fa;
-            color: #374151;
-            border: 1.5px solid #d1d5db;
-        }
-        
-        .btn-secondary:hover {
-            background: #f1f3f4;
-            border-color: #9ca3af;
-        }
-        
-        .btn-success {
-            background: #10b981;
-            color: #ffffff;
-            box-shadow: 0 1px 3px rgba(16, 185, 129, 0.12);
-        }
-        
-        .btn-success:hover {
-            background: #059669;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
-        }
-        
-        .btn-danger {
-            background: #ef4444;
-            color: #ffffff;
-            box-shadow: 0 1px 3px rgba(239, 68, 68, 0.12);
-        }
-        
-        .btn-danger:hover {
-            background: #dc2626;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
-        }
-        
-        .btn-warning {
-            background: #f59e0b;
-            color: #ffffff;
-            box-shadow: 0 1px 3px rgba(245, 158, 11, 0.12);
-        }
-        
-        .btn-warning:hover {
-            background: #d97706;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
-        }
-        
-        .actions-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 20px;
-            border-top: 1px solid #f3f4f6;
-            padding-top: 24px;
-        }
-        
-        .bulk-actions {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .pagination {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        
-        .pagination .btn {
-            min-width: 40px;
-            height: 40px;
-            padding: 0;
-            font-weight: 500;
-        }
-        
-        .pagination .btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-        
-        .page-info {
-            color: #6b7280;
-            font-size: 14px;
-            font-weight: 500;
-            margin: 0 16px;
-            padding: 8px 16px;
-            background: #f9fafb;
-            border-radius: 8px;
-        }
-      
-        .table-container {
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-        }
-        
-        .table-wrapper {
-            overflow-x: auto;
-        }
-      
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-      
-        th {
-            background: #f8f9fa;
-            color: #374151;
-            padding: 18px 16px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 13px;
-            letter-spacing: -0.01em;
-            border-bottom: 1px solid #e8e8e8;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        
-        th:first-child {
-            width: 56px;
-        }
-      
-        td {
-            padding: 18px 16px;
-            border-bottom: 1px solid #f3f4f6;
-            font-size: 14px;
-            color: #1f2937;
-            vertical-align: middle;
-            font-weight: 500;
-        }
-      
-        tr:hover {
-            background: #f8f9fa;
-        }
-        
-        tr:last-child td {
-            border-bottom: none;
-        }
-      
-        .checkbox-cell {
-            width: 56px;
-            text-align: center;
-        }
-      
-        input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: #2563eb;
-        }
-      
-        .status-badge {
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 12px;
-            text-transform: capitalize;
-            letter-spacing: -0.01em;
-            display: inline-block;
-            min-width: 80px;
-            text-align: center;
-        }
-      
-        .status-approved {
-            background: #ecfdf5;
-            color: #059669;
-            border: 1px solid #a7f3d0;
-        }
-      
-        .status-rejected {
-            background: #fef2f2;
-            color: #dc2626;
-            border: 1px solid #fca5a5;
-        }
-      
-        .status-pending {
-            background: #fffbeb;
-            color: #d97706;
-            border: 1px solid #fcd34d;
-        }
-        
-        .status-active {
-            background: #ecfdf5;
-            color: #059669;
-            border: 1px solid #a7f3d0;
-        }
-        
-        .status-delivered {
-            background: #ecfdf5;
-            color: #059669;
-            border: 1px solid #a7f3d0;
-        }
-        
-        .status-shipped {
-            background: #fffbeb;
-            color: #d97706;
-            border: 1px solid #fcd34d;
-        }
-        
-        .status-cancelled {
-            background: #fef2f2;
-            color: #dc2626;
-            border: 1px solid #fca5a5;
-        }
-      
-        .review-image {
-            width: 52px;
-            height: 52px;
-            object-fit: cover;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            border: 1px solid #e5e7eb;
-        }
-      
-        .review-image:hover {
-            transform: scale(1.05);
-            border-color: #2563eb;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
-        }
-      
-        .no-image {
-            width: 52px;
-            height: 52px;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #9ca3af;
-            font-size: 11px;
-            font-weight: 500;
-        }
-      
-        .rating {
-            display: flex;
-            gap: 2px;
-        }
-      
-        .star {
-            color: #fbbf24;
-            font-size: 16px;
-        }
-      
-        .star.empty {
-            color: #e5e7eb;
-        }
-      
-        .review-text {
-            max-width: 220px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            cursor: pointer;
-            color: #4b5563;
-        }
-      
-        .review-text:hover {
-            color: #1f2937;
-        }
-      
-        .loading {
-            text-align: center;
-            padding: 80px 20px;
-            color: #6b7280;
-        }
-      
-        .loader {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #2563eb;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-      
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .message {
-            margin: 20px 0;
-            padding: 16px 20px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 500;
-            display: none;
-        }
-      
-        .error-message {
-            background: #fef2f2;
-            color: #dc2626;
-            border: 1px solid #fca5a5;
-        }
-      
-        .success-message {
-            background: #ecfdf5;
-            color: #059669;
-            border: 1px solid #a7f3d0;
-        }
-      
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(8px);
-        }
-      
-        .modal-content {
-            background: #ffffff;
-            margin: 8% auto;
-            padding: 32px;
-            border-radius: 16px;
-            width: 90%;
-            max-width: 700px;
-            position: relative;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        }
-      
-        .modal img {
-            width: 100%;
-            border-radius: 12px;
-        }
-      
-        .close-modal {
-            position: absolute;
-            right: 20px;
-            top: 20px;
-            font-size: 28px;
-            font-weight: 300;
-            cursor: pointer;
-            color: #6b7280;
-            transition: all 0.15s ease;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-        }
-      
-        .close-modal:hover {
-            color: #1f2937;
-            background: #f9fafb;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 80px 20px;
-            color: #6b7280;
-        }
-        
-        .empty-state h3 {
-            color: #374151;
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-        
-        .empty-state p {
-            color: #9ca3af;
-            font-size: 16px;
-        }
-        
-        @media (max-width: 1200px) {
-            .main-container {
-                padding: 24px;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .main-container {
-                padding: 16px;
-            }
-            
-            .header h1 {
-                font-size: 28px;
-            }
-            
-            .control-panel {
-                padding: 20px;
-            }
-            
-            .search-section {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 16px;
-            }
-            
-            .actions-section {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 16px;
-            }
-            
-            .bulk-actions {
-                justify-content: center;
-            }
-            
-            .btn {
-                padding: 10px 20px;
-                font-size: 13px;
-            }
-            
-            th, td {
-                padding: 14px 12px;
-                font-size: 13px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .form-select, .form-input {
-                min-width: auto;
-            }
-            
-            .review-text {
-                max-width: 150px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="main-container">
-        <div class="header">
-            <h1>Product Reviews Management</h1>
-            <p class="header-subtitle">Monitor, moderate, and manage customer reviews</p>
-        </div>
-      
-        <div class="control-panel">
-            <div class="search-section">
-                <div class="form-group">
-                    <label class="form-label">Search Column</label>
-                    <select id="searchColumn" class="form-select">
-                        <option value="">All Columns</option>
-                        <option value="productId">Product ID</option>
-                        <option value="productName">Product Name</option>
-                        <option value="userId">User ID</option>
-                        <option value="customerName">Customer Name</option>
-                        <option value="reviewText">Review Text</option>
-                        <option value="status">Status</option>
-                        <option value="rating">Rating</option>
-                        <option value="orderId">Order ID</option>
-                        <option value="paymentId">Payment ID</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Search Term</label>
-                    <input type="text" id="searchInput" class="form-input" placeholder="Type to search...">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">&nbsp;</label>
-                    <div style="display: flex; gap: 12px;">
-                        <button class="btn btn-primary" onclick="performSearch()">Search</button>
-                        <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
-                    </div>
-                </div>
-                
-                <div class="form-group" style="margin-left: auto;">
-                    <label class="form-label">Sort Order</label>
-                    <select id="sortOrder" class="form-select" onchange="applySorting()">
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="actions-section">
-                <div class="bulk-actions">
-                    <button class="btn btn-secondary" onclick="toggleSelectAll()">Select All</button>
-                    <button class="btn btn-success" onclick="updateSelectedStatus('Approved')">Approve</button>
-                    <button class="btn btn-danger" onclick="updateSelectedStatus('Rejected')">Reject</button>
-                    <button class="btn btn-warning" onclick="updateSelectedStatus('Pending')">Set Pending</button>
-                </div>
-              
-                <div class="pagination">
-                    <button class="btn btn-secondary" onclick="previousPage()" id="prevBtn">‹</button>
-                    <span class="page-info">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></span>
-                    <button class="btn btn-secondary" onclick="nextPage()" id="nextBtn">›</button>
-                </div>
-            </div>
-        </div>
-      
-        <div id="messageArea" class="message"></div>
-      
-        <div class="table-container">
-            <div class="table-wrapper">
-                <table id="reviewsTable">
-                    <thead>
-                        <tr>
-                            <th class="checkbox-cell">
-                                <input type="checkbox" id="selectAllCheckbox" onchange="selectAllRows()">
-                            </th>
-                            <th>Status</th>
-                            <th>Created Date</th>
-                            <th>Product Name</th>
-                            <th>Rating</th>
-                            <th>Review Text</th>
-                            <th>Image</th>
-                            <th>Customer Name</th>
-                            <th>Account Status</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th>Order ID</th>
-                            <th>Payment ID</th>
-                            <th>Payment Method</th>
-                            <th>Shipment Status</th>
-                            <th>Return Status</th>
-                            <th>Product Image</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reviewsBody">
-                        <tr>
-                            <td colspan="17" class="loading">
-                                <div class="loader"></div>
-                                <p>Loading reviews...</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-  
-    <div id="imageModal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal" onclick="closeModal()">&times;</span>
-            <img id="modalImage" src="" alt="Review Image">
-        </div>
-    </div>
-  
-    <script>
-        let currentPage = 1;
-        let totalPages = 1;
-        let itemsPerPage = 20;
-        let allReviews = [];
-        let filteredReviews = [];
-        let currentSearchColumn = '';
-        let currentSearchTerm = '';
-        let currentSortOrder = 'newest';
-      
-        // Initialize the page
-        async function init() {
-            await loadReviews();
-        }
-      
-        // Load reviews from parent with search and sort parameters
-        async function loadReviews() {
-            // Send message to parent to fetch reviews data
-            window.parent.postMessage({
-                type: 'loadReviews',
-                page: currentPage,
-                limit: itemsPerPage,
-                searchColumn: currentSearchColumn,
-                searchTerm: currentSearchTerm,
-                sortOrder: currentSortOrder
-            }, '*');
-        }
-        
-        // Search functionality
-        function performSearch() {
-            const searchColumn = document.getElementById('searchColumn').value;
-            const searchTerm = document.getElementById('searchInput').value.trim();
-           
-            if (searchColumn && searchTerm) {
-                currentSearchColumn = searchColumn;
-                currentSearchTerm = searchTerm;
-                currentPage = 1;
-                loadReviews();
-            } else if (!searchColumn && searchTerm) {
-                showMessage('Please select a column to search in', 'error');
-            } else {
-                clearSearch();
-            }
-        }
-        
-        // Clear search
-        function clearSearch() {
-            document.getElementById('searchColumn').value = '';
-            document.getElementById('searchInput').value = '';
-            currentSearchColumn = '';
-            currentSearchTerm = '';
-            currentPage = 1;
-            loadReviews();
-        }
-        
-        // Apply sorting
-        function applySorting() {
-            currentSortOrder = document.getElementById('sortOrder').value;
-            currentPage = 1;
-            loadReviews();
-        }
-        
-        // Allow Enter key to trigger search
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('searchInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    performSearch();
-                }
-            });
-        });
-      
-        // Handle messages from parent
-        window.addEventListener('message', function(event) {
-            if (event.data.type === 'reviewsLoaded') {
-                displayReviews(event.data.reviews, event.data.totalCount);
-            } else if (event.data.type === 'statusUpdated') {
-                showMessage('Status updated successfully!', 'success');
-                loadReviews();
-            } else if (event.data.type === 'error') {
-                showMessage(event.data.message, 'error');
+import { fetch } from 'wix-fetch';
+import wixSecretsBackend from 'wix-secrets-backend';
+import { API_ENDPOINTS } from 'backend/Delhivery-api/delhivery_api_utils.js';
+import {CONSTANTS} from 'public/constants.js'
+const ORIGIN_PINCODE = CONSTANTS.DELHIVERY_CONSTANTS.ORIGIN_PINCODE
+let ENVIRONMENT = "production"; // Change to "production" for live environment
+
+function getApiUrl(API_NAME) {
+    if (!API_ENDPOINTS[API_NAME]) {
+        console.warn(`Unknown API name: ${API_NAME}`);
+        return null;
+    }
+    return API_ENDPOINTS[API_NAME][ENVIRONMENT] || API_ENDPOINTS[API_NAME].staging;
+}
+
+const API_SECRET = ENVIRONMENT === 'production' ?
+    'DELHIVERY_API_KEY' :
+    'DELHIVERY_API_KEY_STAGE';
+
+async function fetchTat(apiUrl, apiKey) {
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Token ${apiKey}`,
+                'Content-Type': 'application/json'
             }
         });
-      
-        // Display reviews in table
-        function displayReviews(reviews, total) {
-            allReviews = reviews;
-            totalPages = Math.ceil(total / itemsPerPage);
-          
-            document.getElementById('currentPage').textContent = currentPage;
-            document.getElementById('totalPages').textContent = totalPages;
-          
-            const tbody = document.getElementById('reviewsBody');
-          
-            if (reviews.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="17" class="empty-state">
-                            <h3>No reviews found</h3>
-                            <p>Try adjusting your search criteria or filters</p>
-                        </td>
-                    </tr>
-                `;
-                return;
+
+        if (!response.ok) {
+            console.error(`Delhivery API error: ${response.status} ${response.statusText}`);
+            return null;
+        }
+
+        const data = await response.json();
+        return data?.data || null;
+    } catch (error) {
+        console.error("Fetch error:", error);
+        return null;
+    }
+}
+
+export async function checkPincodeTAT(originPincode = ORIGIN_PINCODE, destinationPincode, mot = 'S', pdt = 'B2C', expectedPickupDate = null) {
+    try {
+        if (!originPincode || !/^[0-9]{6}$/.test(originPincode)) {
+            return { success: false, error: "Invalid or missing origin pincode. Please provide a 6-digit pincode." };
+        }
+        if (!destinationPincode || !/^[0-9]{6}$/.test(destinationPincode)) {
+            return { success: false, error: "Invalid or missing destination pincode. Please provide a 6-digit pincode." };
+        }
+
+        if (pdt && !['B2B', 'B2C'].includes(pdt)) {
+            return { success: false, error: "Invalid product type. Use 'B2B' or 'B2C'." };
+        }
+
+        let apiKey;
+        try {
+            // Select API key based on ENVIRONMENT
+            const secretName = API_SECRET
+            apiKey = await wixSecretsBackend.getSecret(secretName);
+            if (!apiKey) throw new Error("API key not found");
+        } catch (error) {
+            console.error("Failed to retrieve API key:", error);
+            return { success: false, error: "Server configuration error. Please contact support." };
+        }
+
+        const baseUrl = getApiUrl('PINCONE_SERVICE');
+        if (!baseUrl) {
+            return { success: false, error: "Internal configuration error. API endpoint not found." };
+        }
+
+        const constructUrl = (mot) => {
+            let url = `${baseUrl}?origin_pin=${originPincode}&destination_pin=${destinationPincode}&mot=${mot}`;
+            if (pdt) url += `&pdt=${pdt}`;
+            if (expectedPickupDate) url += `&expected_pickup_date=${expectedPickupDate}`;
+            return url;
+        };
+
+        let results = {
+            origin_pin: parseInt(originPincode),
+            destination_pin: parseInt(destinationPincode)
+        };
+
+        if (mot === 'all') {
+            const [sData, eData] = await Promise.all([
+                fetchTat(constructUrl('S'), apiKey),
+                fetchTat(constructUrl('E'), apiKey)
+            ]);
+
+            results.S_tat_days = sData?.tat || null;
+            results.E_tat_days = eData?.tat || null;
+            results.expected_delivery_date = sData?.expected_delivery_date || eData?.expected_delivery_date || null;
+            results.message = (sData?.message || eData?.message || "TAT retrieved successfully");
+        } else {
+            const data = await fetchTat(constructUrl(mot), apiKey);
+            if (!data) {
+                return { success: false, error: "No TAT data returned from the API." };
             }
-          
-            tbody.innerHTML = reviews.map(review => {
-                const createdDate = new Date(review._createdDate).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-              
-                return `
-                    <tr data-review-id="${review._id}">
-                        <td class="checkbox-cell">
-                            <input type="checkbox" class="row-checkbox" value="${review._id}">
-                        </td>
-                        <td>
-                            <span class="status-badge status-${review.status || 'pending'}">
-                                ${review.status || 'pending'}
-                            </span>
-                        </td>
-                        <td>${createdDate}</td>
-                        <td>${review.productName || 'Unknown Product'}</td>
-                        <td>${renderStars(review.rating || 0)}</td>
-                        <td class="review-text" title="${review.reviewText || ''}">${review.reviewText || 'No review text'}</td>
-                        <td>
-                            ${review.imageUrl ?
-                                `<img src="${review.imageUrl}" class="review-image" onclick="openImageModal('${review.imageUrl}')" alt="Review">` :
-                                '<div class="no-image">No Image</div>'}
-                        </td>
-                        <td>${review.customerName || 'Unknown'}</td>
-                        <td>
-                            <span class="status-badge status-${review.accountStatus?.toLowerCase() === 'active' ? 'active' : 'pending'}">
-                                ${review.accountStatus || 'Unknown'}
-                            </span>
-                        </td>
-                        <td>${review.customerEmail || 'N/A'}</td>
-                        <td>${review.customerPhone || 'N/A'}</td>
-                        <td>${review.orderId || 'N/A'}</td>
-                        <td>${review.paymentId || 'N/A'}</td>
-                        <td>${review.paymentMethod || 'N/A'}</td>
-                        <td>
-                            <span class="status-badge status-${getShipmentStatusClass(review.shipmentStatus)}">
-                                ${review.shipmentStatus || 'N/A'}
-                            </span>
-                        </td>
-                        <td>${review.returnStatus || 'N/A'}</td>
-                        <td>
-                            ${review.productImage ?
-                                `<img src="${review.productImage}" class="review-image" onclick="openImageModal('${review.productImage}')" alt="Product Image">` :
-                                '<div class="no-image">No Image</div>'}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-          
-            updatePaginationButtons();
+            results[`${mot}_tat_days`] = data.tat || null;
+            results.expected_delivery_date = data.expected_delivery_date || null;
+            results.message = data.message || "TAT retrieved successfully";
         }
-      
-        // Render star rating
-        function renderStars(rating) {
-            let stars = '<div class="rating">';
-            for (let i = 1; i <= 5; i++) {
-                stars += `<span class="star ${i <= rating ? '' : 'empty'}">★</span>`;
+
+        return { success: true, data: results };
+    } catch (error) {
+        console.error("Unexpected error in checkPincodeTAT:", error);
+        return { success: false, error: "An unexpected error occurred. Please try again later." };
+    }
+}
+
+// In backend/Delhivery-api/apiFetchCalls.jsw
+// In backend/Delhivery-api/apiFetchCalls.jsw
+export async function getShippingCost(destinationPincode, originPincode = ORIGIN_PINCODE, md = 'S', ss = 'Delivered', cgm = 200, pt = 'Pre-paid') {
+    console.log("originPincode", originPincode);
+    try {
+        if (!originPincode || !/^[0-9]{6}$/.test(originPincode)) {
+            throw new Error("Invalid or missing origin pincode.");
+        }
+        if (!destinationPincode || !/^[0-9]{6}$/.test(destinationPincode)) {
+            throw new Error("Invalid or missing destination pincode.");
+        }
+
+        let apiKey;
+        try {
+            const secretName = API_SECRET;
+            apiKey = await wixSecretsBackend.getSecret(secretName);
+            if (!apiKey) throw new Error("API key not found");
+        } catch (error) {
+            console.error("Failed to retrieve API key:", error);
+            return null;
+        }
+
+        const baseUrl = getApiUrl('SHIPPING_COST');
+        if (!baseUrl) {
+            return null;
+        }
+
+        const apiUrl = `${baseUrl}?md=${md}&ss=${ss}&d_pin=${destinationPincode}&o_pin=${originPincode}&cgm=${cgm}&pt=${pt}`;
+        console.log("Fetching shipping cost from:", apiUrl);
+
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Token ${apiKey}`,
+                'Content-Type': 'application/json'
             }
-            stars += '</div>';
-            return stars;
+        });
+
+        if (!response.ok) {
+            console.error(`Delhivery API error: ${response.status} ${response.statusText}`);
+            return null;
         }
-      
-        // Get shipment status class
-        function getShipmentStatusClass(status) {
-            switch(status?.toLowerCase()) {
-                case 'delivered': return 'delivered';
-                case 'shipped': return 'shipped';
-                case 'cancelled': return 'cancelled';
-                default: return 'pending';
-            }
+
+        const data = await response.json();
+        console.log(`Shipping cost response for mode ${md}, pt ${pt}:`, data);
+
+        if (data.error) {
+            console.error(`Delhivery API error response: ${data.error}`);
+            return null;
         }
-      
-        // Pagination functions
-        function previousPage() {
-            if (currentPage > 1) {
-                currentPage--;
-                loadReviews();
-            }
+
+        const totalAmount = data?.[0]?.total_amount;
+        if (typeof totalAmount !== 'number' || isNaN(totalAmount)) {
+            console.error(`Invalid total_amount in response: ${totalAmount}`);
+            return null;
         }
-      
-        function nextPage() {
-            if (currentPage < totalPages) {
-                currentPage++;
-                loadReviews();
-            }
-        }
-      
-        function updatePaginationButtons() {
-            document.getElementById('prevBtn').disabled = currentPage === 1;
-            document.getElementById('nextBtn').disabled = currentPage === totalPages;
-        }
-      
-        // Selection functions
-        function toggleSelectAll() {
-            const checkboxes = document.querySelectorAll('.row-checkbox');
-            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-          
-            checkboxes.forEach(cb => cb.checked = !allChecked);
-            selectAllCheckbox.checked = !allChecked;
-        }
-      
-        function selectAllRows() {
-            const selectAll = document.getElementById('selectAllCheckbox').checked;
-            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = selectAll);
-        }
-      
-        // Status update function
-        function updateSelectedStatus(status) {
-            const selectedIds = Array.from(document.querySelectorAll('.row-checkbox:checked'))
-                .map(cb => cb.value);
-          
-            if (selectedIds.length === 0) {
-                showMessage('Please select at least one review', 'error');
-                return;
-            }
-          
-            // Send update request to parent
-            window.parent.postMessage({
-                type: 'updateStatus',
-                reviewIds: selectedIds,
-                status: status
-            }, '*');
-        }
-      
-        // Show message
-        function showMessage(message, type) {
-            const messageArea = document.getElementById('messageArea');
-            messageArea.className = `message ${type}-message`;
-            messageArea.textContent = message;
-            messageArea.style.display = 'block';
-          
-            setTimeout(() => {
-                messageArea.style.display = 'none';
-            }, 4000);
-        }
-      
-        // Image modal functions
-        function openImageModal(imageUrl) {
-            document.getElementById('modalImage').src = imageUrl;
-            document.getElementById('imageModal').style.display = 'block';
-        }
-      
-        function closeModal() {
-            document.getElementById('imageModal').style.display = 'none';
-        }
-      
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('imageModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        }
-      
-        // Initialize on load
-        init();
-    </script>
-</body>
-</html>
+
+        // Return additional fields for COD
+        return {
+            totalAmount: totalAmount * 100,
+            grossAmount: (data?.[0]?.gross_amount || totalAmount) * 100, // Fallback to total_amount if gross_amount is missing
+            chargeCOD: (data?.[0]?.charge_COD || 0) * 100 // Default to 0 if charge_COD is missing
+        };
+    } catch (error) {
+        console.error("Error in getShippingCost:", error);
+        return null;
+    }
+}
+export function dummygetApiUrl(PINCODE) {
+    return PINCODE === '700051' ? 500 : null;
+}
