@@ -1,453 +1,112 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100vh;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-        }
-        .slideshow-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-        .slideshow-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-        .slides-inner {
-            display: flex;
-            width: 100%;
-            height: 100%;
-            transition: transform var(--transition-speed, 0.3s) ease-in-out;
-        }
-        .slide {
-            flex: 0 0 100%;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-        .nav-container {
-            position: absolute;
-            bottom: 40px; /* Position 40px from bottom */
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 10px;
-            z-index: 20;
-        }
-        .nav-icon {
-            width: 8px; /* Small circle for non-selected icons */
-            height: 8px;
-            border-radius: 50%; /* Circular shape */
-            background-color: white; /* Solid white */
-            cursor: pointer;
-            transition: background-color 0.3s ease, width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
-        }
-        .nav-icon.active {
-            width: 21.6px; /* Elongated box for active icon */
-            height: 10px;
-            border-radius: 15px; /* Rounded corners */
-            background-color: white; /* Solid white */
-        }
-        .arrow {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            z-index: 20;
-            padding: 10px;
-            display: none;
-        }
-        .arrow svg {
-            width: 40px;
-            height: 40px;
-            fill: white;
-            stroke: white;
-            stroke-width: 2;
-        }
-        .arrow-left {
-            left: 20px;
-        }
-        .arrow-right {
-            right: 20px;
-        }
-        .error-slide {
-            flex: 0 0 100%;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 16px;
-            text-align: center;
-            background-color: #333;
-        }
-        @media (max-width: 1000px) and (min-width: 751px) {
-            .nav-icon {
-                width: 10px; /* Slightly larger circle for tablet */
-                height: 10px;
-            }
-            .nav-icon.active {
-                width: 27.6px; /* Slightly larger elongated box */
-                height: 13px;
-            }
-        }
-        @media (max-width: 750px) {
-            .nav-icon {
-                width: 6px; /* Smaller circle for mobile */
-                height: 6px;
-            }
-            .nav-icon.active {
-                width: 9px; /* Smaller elongated box */
-                height: 4.17px;
-            }
-            .nav-container {
-                gap: 3px;
-            }
-        }
-        @media (min-width: 1001px) {
-            .arrow {
-                display: block;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="slideshow-wrapper">
-        <div class="slideshow-container" id="slideshow">
-            <div class="slides-inner" id="slidesInner">
-                <!-- Slides will be dynamically added here -->
-            </div>
-            <div class="nav-container" id="navIcons">
-                <!-- Navigation icons will be dynamically added here -->
-            </div>
-            <button class="arrow arrow-left" id="arrowLeft" title="Previous Slide">
-                <svg viewBox="0 0 24 24">
-                    <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/>
-                </svg>
-            </button>
-            <button class="arrow arrow-right" id="arrowRight" title="Next Slide">
-                <svg viewBox="0 0 24 24">
-                    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/>
-                </svg>
-            </button>
-        </div>
-    </div>
+function onItemReady($item, itemData, index, prefix) {
+    try {
+        $item(`#${prefix}ProductName`).text = itemData.name?.split("|")[0]?.trim() || '';
 
-    <script>
-        let images = [];
-        let currentIndex = 0;
-        let isTransitioning = false;
-        let autoSlideIntervalId = null;
-        let transitionSpeed = 0.3;
-        let disableSlide = false;
-        let autoSlideInterval = 0;
+            const brandNameElement = $item(`#${prefix}BrandName`);
+            if (brandNameElement?.type) {
+                brandNameElement.text = itemData.brandName || CONSTANTS.BRAND_NAME;
+            }
+        // Handle discountedPrice
+        const discountedPrice = itemData.discountedPrice;
+        const discountedPriceText = $item(`#${prefix}DiscountedPrice`);
+        if (discountedPriceText?.type && discountedPrice != null) {
+            discountedPriceText.text = itemData.formattedDiscountedPrice || `₹${discountedPrice.toFixed(2)}`;
+            discountedPriceText.show();
+        } else {
+            discountedPriceText?.hide();
+        }
 
-        // Signal that HTML component is ready
-        document.addEventListener("DOMContentLoaded", () => {
-            window.parent.postMessage({ type: "htmlReady" }, "*");
-        });
+        // Handle formattedPrice (show only if discountedPrice < price)
+        const price = itemData.price;
+        const priceText = $item(`#${prefix}Price`);
+        if (priceText?.type && price != null && discountedPrice != null && discountedPrice < price) {
+            const formattedPrice = itemData.formattedPrice || `₹${price.toFixed(2)}`;
+            // Trim to show only integer part (e.g., "800" instead of "800.00")
+            priceText.text = formattedPrice.split('.')[0];
+            priceText.show();
+        } else {
+            priceText?.hide();
+        }
 
-        window.onmessage = function(event) {
-            if (event.data && event.data.type === "initSlideshow") {
-                images = event.data.images || [];
-                transitionSpeed = event.data.transitionSpeed || 0.3;
-                disableSlide = event.data.disableSlide || false;
-                autoSlideInterval = event.data.autoSlideInterval || 0;
-                document.documentElement.style.setProperty('--transition-speed', `${transitionSpeed}s`);
+        const mediaItems = itemData.mediaItems || [];
+        const image1 = $item(`#${prefix}Image${prefix === 'topChoices' ? '2' : '1'}`);
+        const image2 = $item(`#${prefix}Image${prefix === 'topChoices' ? '1' : '2'}`);
 
-                // Preload images
-                images.forEach(image => {
-                    const link = document.createElement("link");
-                    link.rel = "preload";
-                    link.href = image.src;
-                    link.as = "image";
-                    document.head.appendChild(link);
-                });
+        if (image1?.type && mediaItems[prefix === 'topChoices' ? 1 : 0]?.src) {
+            image1.src = transformImageUrl(mediaItems[prefix === 'topChoices' ? 1 : 0].src);
+            image1.show();
+        } else {
+            image1?.hide();
+        }
 
-                if (images.length > 0) {
-                    initSlideshow();
-                    if (!disableSlide && autoSlideInterval) {
-                        startAutoSlide(autoSlideInterval);
+        if (image2?.type && mediaItems[prefix === 'topChoices' ? 0 : 1]?.src) {
+            image2.src = transformImageUrl(mediaItems[prefix === 'topChoices' ? 0 : 1].src);
+            image2.show();
+        } else {
+            image2?.hide();
+        }
+
+        if (FORMFACTOR === "Desktop") {
+            const allPossibleSizes = CONSTANTS.VARIANTS.AVAILABLESIZES || [];
+            const availableSizes = new Set(
+                prefix === 'topChoices' ?
+                itemData.availableSizes?.filter(size => size?.inStock)?.map(size => size.value) || [] :
+                itemData.productOptions?.Size?.choices?.filter(size => size?.inStock)?.map(size => size.value) || []
+            );
+
+            allPossibleSizes.forEach(size => {
+                const sizeButton = $item(`#${prefix}Size${size}`);
+                if (sizeButton?.type) {
+                    try {
+                        if (availableSizes.has(size)) {
+                            sizeButton.enable();
+                            sizeButton.customClassList.remove("diagonal-cut");
+                        } else {
+                            sizeButton.disable();
+                            sizeButton.customClassList.add("diagonal-cut");
+                        }
+                    } catch (err) {
+                        console.error(`Error manipulating ${prefix} size ${size}:`, err);
                     }
-                } else {
-                    initSlideshow(); // Handle empty slideshow with placeholder
-                    document.getElementById("slideshow").style.display = "none";
-                    document.getElementById("navIcons").style.display = "none";
-                    document.getElementById("arrowLeft").style.display = "none";
-                    document.getElementById("arrowRight").style.display = "none";
-                    window.parent.postMessage({
-                        type: "imageError",
-                        url: null,
-                        error: "No images provided"
-                    }, "*");
                 }
-            } else if (event.data && event.data.type === "cleanup") {
-                stopAutoSlide();
-                const slidesInner = document.getElementById("slidesInner");
-                slidesInner.removeEventListener("transitionend", handleTransitionEnd);
-                slidesInner.innerHTML = "";
-                document.getElementById("navIcons").innerHTML = "";
-            }
-        };
-
-        function startAutoSlide(interval) {
-            if (autoSlideIntervalId) clearInterval(autoSlideIntervalId);
-            autoSlideIntervalId = setInterval(nextSlide, interval);
-        }
-
-        function stopAutoSlide() {
-            if (autoSlideIntervalId) {
-                clearInterval(autoSlideIntervalId);
-                autoSlideIntervalId = null;
-            }
-        }
-
-        function restartAutoSlide() {
-            if (!disableSlide && autoSlideInterval) {
-                stopAutoSlide();
-                setTimeout(() => startAutoSlide(autoSlideInterval), autoSlideInterval);
-            }
-        }
-
-        function initSlideshow() {
-            const slidesInner = document.getElementById("slidesInner");
-            const navIcons = document.getElementById("navIcons");
-            const arrowLeft = document.getElementById("arrowLeft");
-            const arrowRight = document.getElementById("arrowRight");
-
-            slidesInner.innerHTML = "";
-            navIcons.innerHTML = "";
-
-            if (images.length === 0) {
-                // Display placeholder for empty slideshow
-                const slide = document.createElement("img");
-                slide.src = "https://via.placeholder.com/1200x600?text=Slideshow+Placeholder";
-                slide.className = "slide";
-                slide.loading = "lazy";
-                slidesInner.appendChild(slide);
-                document.getElementById("navIcons").style.display = "none";
-                document.getElementById("arrowLeft").style.display = "none";
-                document.getElementById("arrowRight").style.display = "none";
-                return;
-            }
-
-            if (disableSlide) {
-                // Single image: display with active nav icon but no navigation or animation
-                const slide = document.createElement("img");
-                slide.src = images[0].src;
-                slide.className = "slide";
-                slide.loading = "lazy";
-                slide.onerror = () => {
-                    console.error(`Slide failed to load: ${images[0].src}`);
-                    const errorSlide = document.createElement("div");
-                    errorSlide.className = "error-slide";
-                    errorSlide.textContent = "Image not available";
-                    slidesInner.replaceChild(errorSlide, slide);
-                    window.parent.postMessage({
-                        type: "imageError",
-                        url: images[0].src,
-                        error: "Failed to load image"
-                    }, "*");
-                };
-                slide.onload = () => {
-                    console.log(`Slide loaded: ${images[0].src}`);
-                    window.parent.postMessage({
-                        type: "imageSuccess",
-                        url: images[0].src,
-                        message: "Image loaded successfully"
-                    }, "*");
-                };
-                slidesInner.appendChild(slide);
-
-                // Add single active nav icon
-                const navIcon = document.createElement("span");
-                navIcon.className = "nav-icon active";
-                navIcons.appendChild(navIcon);
-
-                arrowLeft.style.display = "none";
-                arrowRight.style.display = "none";
-                return;
-            }
-
-            // Multiple images: set up slideshow with navigation
-            const firstClone = document.createElement("img");
-            firstClone.src = images[images.length - 1].src;
-            firstClone.className = "slide";
-            firstClone.loading = "lazy";
-            slidesInner.appendChild(firstClone);
-
-            images.forEach((image, index) => {
-                const slide = document.createElement("img");
-                slide.src = image.src;
-                slide.className = "slide";
-                slide.loading = "lazy";
-
-                slide.onerror = () => {
-                    console.error(`Slide failed to load: ${image.src}`);
-                    const errorSlide = document.createElement("div");
-                    errorSlide.className = "error-slide";
-                    errorSlide.textContent = "Image not available";
-                    slidesInner.replaceChild(errorSlide, slide);
-                    window.parent.postMessage({
-                        type: "imageError",
-                        url: image.src,
-                        error: "Failed to load image"
-                    }, "*");
-                };
-
-                slide.onload = () => {
-                    console.log(`Slide loaded: ${image.src}`);
-                    window.parent.postMessage({
-                        type: "imageSuccess",
-                        url: image.src,
-                        message: "Image loaded successfully"
-                    }, "*");
-                };
-
-                slidesInner.appendChild(slide);
-
-                const navIcon = document.createElement("span");
-                navIcon.className = "nav-icon" + (index === 0 ? " active" : "");
-                navIcon.onclick = () => {
-                    stopAutoSlide();
-                    goToSlide(index);
-                    restartAutoSlide();
-                };
-                navIcons.appendChild(navIcon);
             });
-
-            const lastClone = document.createElement("img");
-            lastClone.src = images[0].src;
-            lastClone.className = "slide";
-            lastClone.loading = "lazy";
-            slidesInner.appendChild(lastClone);
-
-            arrowLeft.onclick = () => {
-                stopAutoSlide();
-                previousSlide();
-                restartAutoSlide();
-            };
-            arrowRight.onclick = () => {
-                stopAutoSlide();
-                nextSlide();
-                restartAutoSlide();
-            };
-
-            updateSlidesPosition(false);
-            updateNavIcons();
-
-            slidesInner.addEventListener("transitionend", handleTransitionEnd);
-
-            // Enable touch events only for multiple images
-            let touchStartX = 0;
-            let touchEndX = 0;
-            const slideshow = document.getElementById("slideshow");
-            slideshow.addEventListener("touchstart", (e) => {
-                touchStartX = e.changedTouches[0].screenX;
-            }, { passive: true });
-
-            slideshow.addEventListener("touchend", (e) => {
-                touchEndX = e.changedTouches[0].screenX;
-                if (touchStartX - touchEndX > 50) {
-                    stopAutoSlide();
-                    nextSlide();
-                    restartAutoSlide();
-                }
-                if (touchEndX - touchStartX > 50) {
-                    stopAutoSlide();
-                    previousSlide();
-                    restartAutoSlide();
-                }
-            }, { passive: true });
         }
 
-        function goToSlide(targetIndex) {
-            if (isTransitioning) return;
-            isTransitioning = true;
+        const banner = $item(`#${prefix}Banner`);
+        const bannerText = $item(`#${prefix}BannerText`);
+        const redirectButton = $item(`#${prefix}RedirectButton`);
+        if (itemData.link) {
+            redirectButton.link = itemData.link;
+            redirectButton.target = "_blank";
+        }
+        if (banner?.type && bannerText?.type) {
+            if (!itemData.inStock) {
+                banner.show();
 
-            const numSlides = images.length;
-            let newIndex = currentIndex;
-
-            // Handle wrap-around cases
-            if (currentIndex === numSlides - 1 && targetIndex === 0) {
-                newIndex = numSlides; // Points to last clone (first slide)
-            } else if (currentIndex === 0 && targetIndex === numSlides - 1) {
-                newIndex = -1; // Points to first clone (last slide)
             } else {
-                newIndex = targetIndex;
-            }
+                banner.hide();
 
-            currentIndex = newIndex;
-            updateSlidesPosition(true);
-            updateNavIcons();
-            updateParent();
-        }
-
-        function nextSlide() {
-            if (isTransitioning) return;
-            isTransitioning = true;
-            currentIndex++;
-            updateSlidesPosition(true);
-            updateNavIcons();
-            updateParent();
-        }
-
-        function previousSlide() {
-            if (isTransitioning) return;
-            isTransitioning = true;
-            currentIndex--;
-            updateSlidesPosition(true);
-            updateNavIcons();
-            updateParent();
-        }
-
-        function updateSlidesPosition(animate = true) {
-            const slidesInner = document.getElementById("slidesInner");
-            slidesInner.style.transition = animate ? `transform ${transitionSpeed}s ease-in-out` : "none";
-            slidesInner.style.transform = `translateX(-${(currentIndex + 1) * 100}%)`;
-        }
-
-        function handleTransitionEnd() {
-            const slidesInner = document.getElementById("slidesInner");
-            if (currentIndex >= images.length) {
-                currentIndex = 0;
-                slidesInner.style.transition = "none";
-                slidesInner.style.transform = `translateX(-100%)`;
-            } else if (currentIndex < 0) {
-                currentIndex = images.length - 1;
-                slidesInner.style.transition = "none";
-                slidesInner.style.transform = `translateX(-${images.length * 100}%)`;
-            }
-            isTransitioning = false;
-            updateNavIcons();
-        }
-
-        function updateNavIcons() {
-            const navIcons = document.getElementsByClassName("nav-icon");
-            for (let i = 0; i < navIcons.length; i++) {
-                navIcons[i].className = "nav-icon" + (i === currentIndex ? " active" : "");
             }
         }
 
-        function updateParent() {
-            window.parent.postMessage({
-                type: "updateCurrentImage",
-                index: currentIndex
-            }, "*");
+        const wishlistButton1 = $item(`#${prefix}Wishlist1`);
+        const wishlistButton2 = $item(`#${prefix}Wishlist2`);
+
+        if (wishlistButton1?.type && wishlistButton2?.type) {
+            const isInWishlist = wishlistProductIds.has(itemData.productId);
+
+            if (isInWishlist) {
+                wishlistButton1.hide();
+                wishlistButton2.show();
+            } else {
+                wishlistButton1.show();
+                wishlistButton2.hide();
+            }
+
+            wishlistButton1.onClick(() => createWishlistHandler($item, itemData, true, prefix)());
+            wishlistButton2.onClick(() => createWishlistHandler($item, itemData, false, prefix)());
         }
-    </script>
-</body>
-</html>
+    } catch (err) {
+        console.error(`Error in onItemReady for ${prefix} item ${index}:`, err);
+    }
+}
